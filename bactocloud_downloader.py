@@ -11,6 +11,7 @@ import requests
 import json
 import os
 import platform
+import time as time_module
 from pathlib import Path
 from tkcalendar import DateEntry
 
@@ -294,6 +295,39 @@ class BactoCloudDownloader:
             "Authorization": f"Bearer {self.api_key.get()}",
             "Content-Type": "application/json"
         }
+    
+    def make_request_with_retry(self, method, url, max_retries=3, **kwargs):
+        """Make an API request with retry logic for 429 errors"""
+        for attempt in range(max_retries):
+            try:
+                if method.lower() == 'get':
+                    response = requests.get(url, **kwargs)
+                elif method.lower() == 'post':
+                    response = requests.post(url, **kwargs)
+                else:
+                    raise ValueError(f"Unsupported HTTP method: {method}")
+                
+                # If we get a 429, wait and retry
+                if response.status_code == 429:
+                    if attempt < max_retries - 1:
+                        self.log(f"    Rate limit reached (429), waiting 5 seconds before retry {attempt + 1}/{max_retries - 1}...")
+                        time_module.sleep(5)
+                        continue
+                    else:
+                        self.log(f"    Rate limit reached (429), max retries exceeded")
+                        return response
+                
+                # For any other status code, return immediately
+                return response
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    self.log(f"    Request error, retrying in 5 seconds: {str(e)}")
+                    time_module.sleep(5)
+                else:
+                    raise
+        
+        return response
         
     def load_devices(self):
         """Load devices from the API"""
@@ -305,7 +339,8 @@ class BactoCloudDownloader:
         self.device_listbox.delete(0, tk.END)
         
         try:
-            response = requests.get(
+            response = self.make_request_with_retry(
+                'get',
                 f"{self.base_url}/api/v1/device",
                 headers=self.get_headers(),
                 params={"no_virtual": "true"}
@@ -424,7 +459,8 @@ class BactoCloudDownloader:
                 self.log(f"  Filter: {filter_data}")
 
                 # Get data list
-                response = requests.post(
+                response = self.make_request_with_retry(
+                    'post',
                     f"{self.base_url}/api/v1/data/list",
                     headers=self.get_headers(),
                     json=filter_data
@@ -517,7 +553,8 @@ class BactoCloudDownloader:
                 if file_code in file_types:
                     extension, file_type = file_types[file_code]
                     try:
-                        file_response = requests.get(
+                        file_response = self.make_request_with_retry(
+                            'get',
                             f"{self.base_url}/api/v1/data/file/{file_id}",
                             headers=self.get_headers()
                         )
