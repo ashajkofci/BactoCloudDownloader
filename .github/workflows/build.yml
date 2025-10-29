@@ -5,22 +5,120 @@ on:
     tags:
       - 'v*'
   workflow_dispatch:
+    inputs:
+      version_bump:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      custom_version:
+        description: 'Custom version (optional, e.g., v1.2.3) - overrides version_bump'
+        required: false
+        type: string
 
 permissions:
   contents: write
 
 jobs:
+  create-release-tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      new_version: ${{ steps.create_tag.outputs.new_version }}
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+    
+    - name: Get latest version and create new tag
+      id: create_tag
+      run: |
+        # Get latest version tag
+        LATEST_TAG=$(git tag -l "v*" --sort=-v:refname | head -n 1)
+        
+        if [ -z "$LATEST_TAG" ]; then
+          echo "No existing tags, starting from v0.0.0"
+          MAJOR=0
+          MINOR=0
+          PATCH=0
+        else
+          echo "Latest tag: $LATEST_TAG"
+          # Parse version
+          VERSION=${LATEST_TAG#v}
+          MAJOR=$(echo $VERSION | cut -d. -f1)
+          MINOR=$(echo $VERSION | cut -d. -f2)
+          PATCH=$(echo $VERSION | cut -d. -f3)
+        fi
+        
+        # Check if custom version is provided
+        if [ -n "${{ github.event.inputs.custom_version }}" ]; then
+          NEW_VERSION="${{ github.event.inputs.custom_version }}"
+          # Add 'v' prefix if not present
+          if [[ ! $NEW_VERSION == v* ]]; then
+            NEW_VERSION="v${NEW_VERSION}"
+          fi
+        else
+          # Bump version based on input
+          case "${{ github.event.inputs.version_bump }}" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+        fi
+        
+        echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+        echo "New version: $NEW_VERSION"
+        
+        # Create and push tag
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git tag -a "$NEW_VERSION" -m "Release $NEW_VERSION"
+        git push origin "$NEW_VERSION"
+
   build-windows:
+    if: always() && !cancelled() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && needs.create-release-tag.result == 'success'))
+    needs: [create-release-tag]
     runs-on: windows-latest
     permissions:
       contents: read
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+    
+    - name: Get version from tag
+      id: get_version
+      shell: bash
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ needs.create-release-tag.outputs.new_version }}"
+        elif [[ $GITHUB_REF == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION="dev"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
     
     - name: Install dependencies
       run: |
@@ -31,6 +129,22 @@ jobs:
     - name: Build Windows executable
       run: |
         pyinstaller --onefile --windowed --name BactoCloudDownloader --icon NONE bactocloud_downloader.py
+    
+    - name: Rename Windows executable with version
+      shell: bash
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        if [ -f "dist/BactoCloudDownloader.exe" ]; then
+          cp "dist/BactoCloudDownloader.exe" "dist/BactoCloudDownloader-${VERSION}-Windows.exe"
+        fi
+    
+    - name: Update Inno Setup script with version
+      shell: bash
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        VERSION_NUM="${VERSION#v}"
+        sed -i "s/AppVersion=1.0.0/AppVersion=${VERSION_NUM}/" windows_installer.iss
+        sed -i "s/OutputBaseFilename=BactoCloudDownloader-Setup/OutputBaseFilename=BactoCloudDownloader-${VERSION}-Setup/" windows_installer.iss
     
     - name: Create Windows installer with Inno Setup
       run: |
@@ -43,21 +157,38 @@ jobs:
       with:
         name: BactoCloudDownloader-Windows
         path: |
-          dist/BactoCloudDownloader.exe
+          dist/BactoCloudDownloader-*.exe
           Output/*.exe
         if-no-files-found: ignore
 
   build-macos:
+    if: always() && !cancelled() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && needs.create-release-tag.result == 'success'))
+    needs: [create-release-tag]
     runs-on: macos-latest
     permissions:
       contents: read
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.11'
+    
+    - name: Get version from tag
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ needs.create-release-tag.outputs.new_version }}"
+        elif [[ $GITHUB_REF == refs/tags/* ]]; then
+          VERSION=${GITHUB_REF#refs/tags/}
+        else
+          VERSION="dev"
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "Version: $VERSION"
     
     - name: Install dependencies
       run: |
@@ -69,12 +200,20 @@ jobs:
       run: |
         pyinstaller --onefile --windowed --name BactoCloudDownloader bactocloud_downloader.py
     
+    - name: Rename macOS executable with version
+      run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
+        if [ -f "dist/BactoCloudDownloader" ]; then
+          cp "dist/BactoCloudDownloader" "dist/BactoCloudDownloader-${VERSION}-macOS"
+        fi
+    
     - name: Create DMG (macOS installer)
       run: |
+        VERSION="${{ steps.get_version.outputs.version }}"
         # Create a simple DMG
         mkdir -p dist/dmg
         cp -r dist/BactoCloudDownloader.app dist/dmg/ 2>/dev/null || cp dist/BactoCloudDownloader dist/dmg/
-        hdiutil create -volname BactoCloudDownloader -srcfolder dist/dmg -ov -format UDZO dist/BactoCloudDownloader.dmg
+        hdiutil create -volname "BactoCloudDownloader ${VERSION}" -srcfolder dist/dmg -ov -format UDZO "dist/BactoCloudDownloader-${VERSION}.dmg"
       continue-on-error: true
     
     - name: Upload macOS artifacts
@@ -82,19 +221,29 @@ jobs:
       with:
         name: BactoCloudDownloader-macOS
         path: |
-          dist/BactoCloudDownloader
+          dist/BactoCloudDownloader-*.dmg
+          dist/BactoCloudDownloader-*-macOS
           dist/BactoCloudDownloader.app
-          dist/BactoCloudDownloader.dmg
         if-no-files-found: ignore
 
   release:
-    needs: [build-windows, build-macos]
+    needs: [create-release-tag, build-windows, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    if: startsWith(github.ref, 'refs/tags/')
+    if: always() && !cancelled() && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && needs.create-release-tag.result == 'success'))
     
     steps:
+    - name: Get version from tag
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ needs.create-release-tag.outputs.new_version }}"
+        else
+          VERSION=${GITHUB_REF#refs/tags/}
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+    
     - name: Download Windows artifacts
       uses: actions/download-artifact@v4
       with:
@@ -110,8 +259,14 @@ jobs:
     - name: Create Release
       uses: softprops/action-gh-release@v1
       with:
+        tag_name: ${{ steps.get_version.outputs.version }}
+        name: "BactoCloud Downloader ${{ steps.get_version.outputs.version }}"
+        draft: false
+        prerelease: false
+        generate_release_notes: true
         files: |
-          windows/*
-          macos/*
+          windows/*.exe
+          macos/*.dmg
+          macos/*-macOS
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

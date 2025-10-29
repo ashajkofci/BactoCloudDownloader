@@ -112,6 +112,57 @@ pip install pyinstaller
 pyinstaller --onefile --windowed --name BactoCloudDownloader bactocloud_downloader.py
 ```
 
+### Creating a Release
+
+You have two options to create a release:
+
+#### Option 1: GitHub Actions UI (Recommended)
+
+1. Go to the **Actions** tab in GitHub
+2. Click on the **Build** workflow
+3. Click **Run workflow** button
+4. Select version bump type:
+   - **Patch** (x.x.1) - Bug fixes
+   - **Minor** (x.1.x) - New features
+   - **Major** (1.x.x) - Breaking changes
+5. Optionally enter a custom version (e.g., `v1.2.3`)
+6. Click **Run workflow**
+
+The workflow will automatically:
+- Calculate the new version number
+- Create and push a git tag
+- Build installers for all platforms
+- Create a GitHub release with all artifacts
+
+#### Option 2: Command Line Script
+
+Use the included release script:
+
+```bash
+python release.py
+```
+
+The script will:
+1. Detect the current version from git tags
+2. Prompt you to select version bump type:
+   - **Major** (1.x.x) - Breaking changes
+   - **Minor** (x.1.x) - New features
+   - **Patch** (x.x.1) - Bug fixes
+3. Create and push a new version tag
+4. Trigger GitHub Actions to build installers for all platforms
+
+#### Release Artifacts
+
+The automated build creates:
+- **Windows**: 
+  - `BactoCloudDownloader-vX.X.X-Windows.exe` (standalone executable)
+  - `BactoCloudDownloader-vX.X.X-Setup.exe` (installer)
+- **macOS**: 
+  - `BactoCloudDownloader-vX.X.X-macOS` (standalone executable)
+  - `BactoCloudDownloader-vX.X.X.dmg` (installer)
+
+All files are automatically uploaded to the GitHub release page.
+
 ## GitHub Actions
 
 This repository includes automated workflows:
