@@ -119,6 +119,89 @@ class TestBactoCloudDownloaderCore(unittest.TestCase):
         self.assertEqual(safe_empty, "unnamed")
 
 
+class TestBucketSelection(unittest.TestCase):
+    """Test cases for bucket selection functionality"""
+    
+    def _build_bucket_list(self, bucket_auto, bucket_manual, bucket_monitoring):
+        """Helper method to build bucket list based on selections"""
+        buckets = []
+        if bucket_auto:
+            buckets.append("auto")
+        if bucket_manual:
+            buckets.append("manual")
+        if bucket_monitoring:
+            buckets.append("monitoring")
+        return buckets
+    
+    def test_bucket_filter_all_selected(self):
+        """Test bucket filter with all buckets selected"""
+        buckets = self._build_bucket_list(True, True, True)
+        
+        self.assertEqual(len(buckets), 3)
+        self.assertIn("auto", buckets)
+        self.assertIn("manual", buckets)
+        self.assertIn("monitoring", buckets)
+    
+    def test_bucket_filter_single_selected(self):
+        """Test bucket filter with only one bucket selected"""
+        buckets = self._build_bucket_list(True, False, False)
+        
+        self.assertEqual(len(buckets), 1)
+        self.assertEqual(buckets[0], "auto")
+    
+    def test_bucket_filter_none_selected(self):
+        """Test bucket filter with no buckets selected"""
+        buckets = self._build_bucket_list(False, False, False)
+        
+        self.assertEqual(len(buckets), 0)
+    
+    def test_bucket_filter_mixed_selection(self):
+        """Test bucket filter with mixed selection"""
+        buckets = self._build_bucket_list(True, False, True)
+        
+        self.assertEqual(len(buckets), 2)
+        self.assertIn("auto", buckets)
+        self.assertNotIn("manual", buckets)
+        self.assertIn("monitoring", buckets)
+    
+    def test_api_filter_with_buckets(self):
+        """Test that API filter includes buckets when specified"""
+        device_id = "test_device_123"
+        start_date = "2024-01-01T00:00:00Z"
+        end_date = "2024-01-31T23:59:59Z"
+        buckets = ["auto", "manual"]
+        
+        filter_data = {
+            "deviceIDs": [device_id],
+            "startDate": start_date,
+            "endDate": end_date,
+            "pageSize": 100,
+            "page": 1,
+            "buckets": buckets
+        }
+        
+        self.assertIn("buckets", filter_data)
+        self.assertEqual(filter_data["buckets"], ["auto", "manual"])
+        self.assertEqual(len(filter_data["buckets"]), 2)
+    
+    def test_api_filter_without_buckets(self):
+        """Test that API filter works without buckets (downloads all)"""
+        device_id = "test_device_123"
+        start_date = "2024-01-01T00:00:00Z"
+        end_date = "2024-01-31T23:59:59Z"
+        
+        filter_data = {
+            "deviceIDs": [device_id],
+            "startDate": start_date,
+            "endDate": end_date,
+            "pageSize": 100,
+            "page": 1
+        }
+        
+        # Should not have buckets key when none are selected
+        self.assertNotIn("buckets", filter_data)
+
+
 class TestConfigPersistence(unittest.TestCase):
     """Test cases for configuration persistence"""
     
@@ -192,6 +275,32 @@ class TestConfigPersistence(unittest.TestCase):
         
         # The load_config method should handle this gracefully
         # by not loading invalid types (tested in the main code)
+    
+    def test_config_with_bucket_selection(self):
+        """Test saving and loading configuration with bucket selections"""
+        from pathlib import Path
+        
+        config_file = Path(self.temp_dir) / "config.json"
+        
+        # Save config with bucket selections
+        test_config = {
+            "api_key": "test_key_123",
+            "output_dir": "/path/to/output",
+            "bucket_auto": True,
+            "bucket_manual": False,
+            "bucket_monitoring": True
+        }
+        
+        with open(config_file, 'w') as f:
+            json.dump(test_config, f, indent=2)
+        
+        # Load config
+        with open(config_file, 'r') as f:
+            loaded_config = json.load(f)
+        
+        self.assertEqual(loaded_config["bucket_auto"], True)
+        self.assertEqual(loaded_config["bucket_manual"], False)
+        self.assertEqual(loaded_config["bucket_monitoring"], True)
 
 
 class TestDirectorySelection(unittest.TestCase):
