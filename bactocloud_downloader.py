@@ -471,13 +471,13 @@ class BactoCloudDownloader:
             self.abort_btn.config(state="disabled")
             
     def process_measurement(self, data_item, device_serial):
-        """Process a single measurement - download FCS and save JSON"""
+        """Process a single measurement - download files and save JSON"""
         # Extract measurement info
         data_id = data_item.get("_id")
         timestamp = data_item.get("timestamp", "")
         name = data_item.get("name", "unnamed")
         
-        # Parse timestamp for folder name
+        # Parse timestamp for folder name and file prefix
         try:
             dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
             date_str = dt.strftime("%Y-%m-%d_%H-%M-%S")
@@ -493,31 +493,46 @@ class BactoCloudDownloader:
         output_path = Path(self.output_dir.get()) / device_serial / folder_name
         output_path.mkdir(parents=True, exist_ok=True)
         
+        # Create file prefix for all files
+        file_prefix = f"{date_str}_{safe_name}"
+        
         self.log(f"  Processing: {folder_name}")
         
         # Save measurement data as JSON
-        json_path = output_path / "result.json"
+        json_path = output_path / f"{file_prefix}_result.json"
         with open(json_path, 'w') as f:
             json.dump(data_item, f, indent=2)
         
-        # Download FCS file if available
-        file_id = data_item.get("file_id")
-        if file_id:
-            try:
-                fcs_response = requests.get(
-                    f"{self.base_url}/api/v1/data/file/{file_id}",
-                    headers=self.get_headers()
-                )
-                
-                if fcs_response.status_code == 200:
-                    fcs_path = output_path / "data.fcs"
-                    with open(fcs_path, 'wb') as f:
-                        f.write(fcs_response.content)
-                    self.log(f"    ✓ Downloaded FCS file ({len(fcs_response.content)} bytes)")
-                else:
-                    self.log(f"    ⚠ FCS file not available (status: {fcs_response.status_code})")
-            except Exception as e:
-                self.log(f"    ⚠ Error downloading FCS: {str(e)}")
+        # Download files if available
+        files = data_item.get("files", {})
+        if files:
+            # File type mapping: "10" = PNG, "20" = FCS, "30" = CSV
+            file_types = {
+                "10": ("png", "summary"),
+                "20": ("fcs", "data"),
+                "30": ("csv", "diagnostics")
+            }
+            
+            for file_code, file_id in files.items():
+                if file_code in file_types:
+                    extension, file_type = file_types[file_code]
+                    try:
+                        file_response = requests.get(
+                            f"{self.base_url}/api/v1/data/file/{file_id}",
+                            headers=self.get_headers()
+                        )
+                        
+                        if file_response.status_code == 200:
+                            file_path = output_path / f"{file_prefix}_{file_type}.{extension}"
+                            with open(file_path, 'wb') as f:
+                                f.write(file_response.content)
+                            self.log(f"    ✓ Downloaded {extension.upper()} file ({len(file_response.content)} bytes)")
+                        else:
+                            self.log(f"    ⚠ {extension.upper()} file not available (status: {file_response.status_code})")
+                    except Exception as e:
+                        self.log(f"    ⚠ Error downloading {extension.upper()}: {str(e)}")
+        else:
+            self.log(f"    ⚠ No files available for this measurement")
 
 
 def main():
