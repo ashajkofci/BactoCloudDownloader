@@ -1,0 +1,108 @@
+name: Build
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build Windows executable
+      run: |
+        pyinstaller --onefile --windowed --name BactoCloudDownloader --icon NONE bactocloud_downloader.py
+    
+    - name: Create Windows installer with Inno Setup
+      run: |
+        choco install innosetup -y
+        iscc windows_installer.iss
+      continue-on-error: true
+    
+    - name: Upload Windows artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: BactoCloudDownloader-Windows
+        path: |
+          dist/BactoCloudDownloader.exe
+          Output/*.exe
+        if-no-files-found: ignore
+
+  build-macos:
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+    
+    - name: Build macOS application
+      run: |
+        pyinstaller --onefile --windowed --name BactoCloudDownloader bactocloud_downloader.py
+    
+    - name: Create DMG (macOS installer)
+      run: |
+        # Create a simple DMG
+        mkdir -p dist/dmg
+        cp -r dist/BactoCloudDownloader.app dist/dmg/ 2>/dev/null || cp dist/BactoCloudDownloader dist/dmg/
+        hdiutil create -volname BactoCloudDownloader -srcfolder dist/dmg -ov -format UDZO dist/BactoCloudDownloader.dmg
+      continue-on-error: true
+    
+    - name: Upload macOS artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: BactoCloudDownloader-macOS
+        path: |
+          dist/BactoCloudDownloader
+          dist/BactoCloudDownloader.app
+          dist/BactoCloudDownloader.dmg
+        if-no-files-found: ignore
+
+  release:
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Download Windows artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: BactoCloudDownloader-Windows
+        path: windows/
+    
+    - name: Download macOS artifacts
+      uses: actions/download-artifact@v4
+      with:
+        name: BactoCloudDownloader-macOS
+        path: macos/
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          windows/*
+          macos/*
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
