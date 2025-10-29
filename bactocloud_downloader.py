@@ -19,7 +19,7 @@ class BactoCloudDownloader:
     def __init__(self, root):
         self.root = root
         self.root.title("BactoCloud Downloader")
-        self.root.geometry("800x700")
+        self.root.geometry("800x800")
         
         self.api_key = tk.StringVar(master=root)
         self.output_dir = tk.StringVar(master=root, value=os.path.join(os.getcwd(), "downloads"))
@@ -390,7 +390,7 @@ class BactoCloudDownloader:
                     messagebox.showinfo("Aborted", f"Download aborted. {total_downloaded} measurements were downloaded before abort.")
                     break
                 
-                device_id = device.get("_id")
+                device_id = device.get("id")
                 device_serial = device.get("serial_number", "Unknown")
                 
                 self.log(f"\nProcessing device: {device_serial}")
@@ -409,16 +409,20 @@ class BactoCloudDownloader:
                 
                 # Prepare filter for data query
                 filter_data = {
-                    "deviceIDs": [device_id],
-                    "startDate": start_datetime.isoformat() + "Z",
-                    "endDate": end_datetime.isoformat() + "Z",
-                    "pageSize": 100,
-                    "page": 1
+                    "device_ids": [device_id],
+                    "start_date": start_datetime.isoformat() + "Z",
+                    "end_date": end_datetime.isoformat() + "Z",
+                    "page_size": 10000,
+                    "with_computations": True,
+                    "page": 0
                 }
                 
                 # Add buckets filter if any are selected
                 filter_data["buckets"] = buckets
                 
+                self.log("filtering data...")
+                self.log(f"  Filter: {filter_data}")
+
                 # Get data list
                 response = requests.post(
                     f"{self.base_url}/api/v1/data/list",
@@ -433,7 +437,9 @@ class BactoCloudDownloader:
                 
                 result = response.json()
                 data_list = result.get("data", [])
-                
+                if not data_list:
+                    self.log("  No measurements found for this device in the specified date range and buckets.")
+                    continue
                 self.log(f"Found {len(data_list)} measurements")
                 
                 # Process each measurement
@@ -490,7 +496,7 @@ class BactoCloudDownloader:
         self.log(f"  Processing: {folder_name}")
         
         # Save measurement data as JSON
-        json_path = output_path / "measurement.json"
+        json_path = output_path / "result.json"
         with open(json_path, 'w') as f:
             json.dump(data_item, f, indent=2)
         
