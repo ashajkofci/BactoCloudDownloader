@@ -64,10 +64,10 @@ class BactoCloudDownloader:
                 with open(config_file, 'r') as f:
                     config = json.load(f)
                 
-                # Load saved values
-                if "api_key" in config:
+                # Load saved values with type validation
+                if "api_key" in config and isinstance(config["api_key"], str):
                     self.api_key.set(config["api_key"])
-                if "output_dir" in config:
+                if "output_dir" in config and isinstance(config["output_dir"], str):
                     self.output_dir.set(config["output_dir"])
                     
                 # Only log if progress_text widget exists
