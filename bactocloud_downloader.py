@@ -5,7 +5,7 @@ BactoCloud Downloader - GUI application for downloading measurement data from Ba
 
 import tkinter as tk
 from tkinter import ttk, messagebox, scrolledtext, filedialog
-from datetime import datetime, time
+from datetime import datetime, time, timedelta
 import threading
 import requests
 import json
@@ -26,6 +26,7 @@ class BactoCloudDownloader:
         self.devices = []
         self.selected_devices = []
         self.base_url = "https://api.bactocloud.com"
+        self.abort_download = False
         
         # Bucket selection variables
         self.bucket_auto = tk.BooleanVar(master=root, value=True)
@@ -215,14 +216,20 @@ class BactoCloudDownloader:
         date_frame = ttk.LabelFrame(self.root, text="Date Range", padding=10)
         date_frame.pack(fill="x", padx=10, pady=5)
         
+        # Calculate default dates: start = 3 months ago, end = today
+        default_end_date = datetime.now().date()
+        default_start_date = (datetime.now() - timedelta(days=90)).date()
+        
         ttk.Label(date_frame, text="Start Date:").grid(row=0, column=0, sticky="w", pady=5)
         self.start_date = DateEntry(date_frame, width=20, background='darkblue',
-                                     foreground='white', borderwidth=2)
+                                     foreground='white', borderwidth=2, date_pattern='yyyy-mm-dd')
+        self.start_date.set_date(default_start_date)
         self.start_date.grid(row=0, column=1, sticky="w", pady=5, padx=5)
         
         ttk.Label(date_frame, text="End Date:").grid(row=1, column=0, sticky="w", pady=5)
         self.end_date = DateEntry(date_frame, width=20, background='darkblue',
-                                   foreground='white', borderwidth=2)
+                                   foreground='white', borderwidth=2, date_pattern='yyyy-mm-dd')
+        self.end_date.set_date(default_end_date)
         self.end_date.grid(row=1, column=1, sticky="w", pady=5, padx=5)
         
         # Output Directory Section
@@ -237,14 +244,25 @@ class BactoCloudDownloader:
             side="right", padx=5
         )
         
-        # Download Button
+        # Download and Abort Buttons
+        button_frame = ttk.Frame(self.root)
+        button_frame.pack(pady=10)
+        
         self.download_btn = ttk.Button(
-            self.root, 
+            button_frame, 
             text="Download Data", 
             command=self.start_download,
             state="disabled"
         )
-        self.download_btn.pack(pady=10)
+        self.download_btn.pack(side="left", padx=5)
+        
+        self.abort_btn = ttk.Button(
+            button_frame,
+            text="Abort",
+            command=self.abort_download_process,
+            state="disabled"
+        )
+        self.abort_btn.pack(side="left", padx=5)
         
         # Progress Section
         progress_frame = ttk.LabelFrame(self.root, text="Progress", padding=10)
@@ -313,6 +331,11 @@ class BactoCloudDownloader:
             self.log(f"Exception: {str(e)}")
             messagebox.showerror("Error", f"Failed to connect to API: {str(e)}")
             
+    def abort_download_process(self):
+        """Abort the ongoing download process"""
+        self.abort_download = True
+        self.log("Abort requested by user...")
+        
     def start_download(self):
         """Start the download process in a background thread"""
         selected_indices = self.device_listbox.curselection()
@@ -323,12 +346,26 @@ class BactoCloudDownloader:
         # Check if at least one bucket is selected
         if not (self.bucket_auto.get() or self.bucket_manual.get() or self.bucket_monitoring.get()):
             messagebox.showwarning("Warning", "Please select at least one bucket type")
+        # Validate that start date and end date are different
+        start_dt = self.start_date.get_date()
+        end_dt = self.end_date.get_date()
+        
+        if start_dt == end_dt:
+            messagebox.showerror("Error", "Start date and end date cannot be the same. Please select a date range.")
+            return
+        
+        if start_dt > end_dt:
+            messagebox.showerror("Error", "Start date cannot be after end date.")
             return
             
         self.selected_devices = [self.devices[i] for i in selected_indices]
         
-        # Disable download button during download
+        # Reset abort flag
+        self.abort_download = False
+        
+        # Disable download button and enable abort button during download
         self.download_btn.config(state="disabled")
+        self.abort_btn.config(state="normal")
         self.progress_bar.start()
         
         # Run download in background thread
@@ -347,6 +384,12 @@ class BactoCloudDownloader:
             total_downloaded = 0
             
             for device in self.selected_devices:
+                # Check if abort was requested
+                if self.abort_download:
+                    self.log("\n=== Download Aborted by User ===")
+                    messagebox.showinfo("Aborted", f"Download aborted. {total_downloaded} measurements were downloaded before abort.")
+                    break
+                
                 device_id = device.get("_id")
                 device_serial = device.get("serial_number", "Unknown")
                 
@@ -395,15 +438,23 @@ class BactoCloudDownloader:
                 
                 # Process each measurement
                 for data_item in data_list:
+                    # Check if abort was requested
+                    if self.abort_download:
+                        self.log("\n=== Download Aborted by User ===")
+                        messagebox.showinfo("Aborted", f"Download aborted. {total_downloaded} measurements were downloaded before abort.")
+                        return
+                    
                     try:
                         self.process_measurement(data_item, device_serial)
                         total_downloaded += 1
                     except Exception as e:
                         self.log(f"Error processing measurement: {str(e)}")
-                        
-            self.log(f"\n=== Download Complete ===")
-            self.log(f"Total measurements downloaded: {total_downloaded}")
-            messagebox.showinfo("Success", f"Downloaded {total_downloaded} measurements")
+            
+            # Only show completion if not aborted
+            if not self.abort_download:
+                self.log(f"\n=== Download Complete ===")
+                self.log(f"Total measurements downloaded: {total_downloaded}")
+                messagebox.showinfo("Success", f"Downloaded {total_downloaded} measurements")
             
         except Exception as e:
             self.log(f"Error during download: {str(e)}")
@@ -411,6 +462,7 @@ class BactoCloudDownloader:
         finally:
             self.progress_bar.stop()
             self.download_btn.config(state="normal")
+            self.abort_btn.config(state="disabled")
             
     def process_measurement(self, data_item, device_serial):
         """Process a single measurement - download FCS and save JSON"""
