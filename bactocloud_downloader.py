@@ -29,6 +29,8 @@ import time as time_module
 from pathlib import Path
 from tkcalendar import DateEntry
 
+import jwt
+import sv_ttk
 
 class BactoCloudDownloader:
     def __init__(self, root):
@@ -168,15 +170,44 @@ class BactoCloudDownloader:
         api_frame = ttk.LabelFrame(self.root, text="API Configuration", padding=10)
         api_frame.pack(fill="x", padx=10, pady=5)
         
+
         ttk.Label(api_frame, text="API Key:").grid(row=0, column=0, sticky="w", pady=5)
         api_entry = ttk.Entry(api_frame, textvariable=self.api_key, width=50, show="*")
         api_entry.grid(row=0, column=1, sticky="ew", pady=5, padx=5)
-        
+
+        # Organization ID label
+        self.org_id_var = tk.StringVar(master=self.root, value="")
+        self.org_id_label = ttk.Label(api_frame, textvariable=self.org_id_var, foreground="blue")
+        self.org_id_label.grid(row=0, column=3, sticky="w", padx=10)
+
+        # Update org ID when API key changes
+        self.api_key.trace_add('write', self.update_org_id_from_api_key)
+
         ttk.Button(api_frame, text="Load Devices", command=self.load_devices).grid(
             row=0, column=2, pady=5, padx=5
         )
-        
+
         api_frame.columnconfigure(1, weight=1)
+    def update_org_id_from_api_key(self, *args):
+        key = self.api_key.get()
+        if not key:
+            self.org_id_var.set("")
+            return
+        try:
+            # JWTs are usually in three parts separated by dots
+            parts = key.split('.')
+            if len(parts) != 3:
+                self.org_id_var.set("Invalid JWT format")
+                return
+            # Decode without verification (no secret needed)
+            claims = jwt.decode(key, options={"verify_signature": False, "verify_aud": False})
+            org_id = claims.get("organizationID")
+            if org_id:
+                self.org_id_var.set(f"Organization ID: {org_id}")
+            else:
+                self.org_id_var.set("Organization ID not found")
+        except Exception as e:
+            self.org_id_var.set(f"JWT error: {str(e)}")
         
         # Device Selection Section
         device_frame = ttk.LabelFrame(self.root, text="Device Selection", padding=10)
@@ -208,21 +239,21 @@ class BactoCloudDownloader:
         
         ttk.Checkbutton(
             bucket_frame, 
-            text="Auto (automatic measurements)", 
+            text="Auto", 
             variable=self.bucket_auto,
             command=self.save_config
         ).grid(row=1, column=0, sticky="w", padx=5, pady=2)
         
         ttk.Checkbutton(
             bucket_frame, 
-            text="Manual (user-initiated measurements)", 
+            text="Manual", 
             variable=self.bucket_manual,
             command=self.save_config
         ).grid(row=1, column=1, sticky="w", padx=5, pady=2)
         
         ttk.Checkbutton(
             bucket_frame, 
-            text="Monitoring (validation/calibration measurements)", 
+            text="Monitoring (validation)", 
             variable=self.bucket_monitoring,
             command=self.save_config
         ).grid(row=1, column=2, sticky="w", padx=5, pady=2)
@@ -589,6 +620,7 @@ class BactoCloudDownloader:
 def main():
     root = tk.Tk()
     app = BactoCloudDownloader(root)
+    sv_ttk.use_light_theme()
     root.mainloop()
 
 
