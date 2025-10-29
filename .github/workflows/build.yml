@@ -265,7 +265,8 @@ jobs:
         prerelease: false
         generate_release_notes: true
         files: |
-          windows/*.exe
+          windows/dist/*.exe
+          windows/Output/*.exe
           macos/*.dmg
           macos/*-macOS
       env:
