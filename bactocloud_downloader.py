@@ -27,6 +27,11 @@ class BactoCloudDownloader:
         self.selected_devices = []
         self.base_url = "https://api.bactocloud.com"
         
+        # Bucket selection variables
+        self.bucket_auto = tk.BooleanVar(master=root, value=True)
+        self.bucket_manual = tk.BooleanVar(master=root, value=True)
+        self.bucket_monitoring = tk.BooleanVar(master=root, value=True)
+        
         self.setup_menu()
         self.setup_ui()
         self.load_config()
@@ -69,6 +74,14 @@ class BactoCloudDownloader:
                     self.api_key.set(config["api_key"])
                 if "output_dir" in config and isinstance(config["output_dir"], str):
                     self.output_dir.set(config["output_dir"])
+                
+                # Load bucket selection preferences
+                if "bucket_auto" in config and isinstance(config["bucket_auto"], bool):
+                    self.bucket_auto.set(config["bucket_auto"])
+                if "bucket_manual" in config and isinstance(config["bucket_manual"], bool):
+                    self.bucket_manual.set(config["bucket_manual"])
+                if "bucket_monitoring" in config and isinstance(config["bucket_monitoring"], bool):
+                    self.bucket_monitoring.set(config["bucket_monitoring"])
                     
                 # Only log if progress_text widget exists
                 if hasattr(self, 'progress_text'):
@@ -85,7 +98,10 @@ class BactoCloudDownloader:
         try:
             config = {
                 "api_key": self.api_key.get(),
-                "output_dir": self.output_dir.get()
+                "output_dir": self.output_dir.get(),
+                "bucket_auto": self.bucket_auto.get(),
+                "bucket_manual": self.bucket_manual.get(),
+                "bucket_monitoring": self.bucket_monitoring.get()
             }
             
             with open(config_file, 'w') as f:
@@ -165,6 +181,35 @@ class BactoCloudDownloader:
         )
         self.device_listbox.pack(side="left", fill="both", expand=True)
         scrollbar.config(command=self.device_listbox.yview)
+        
+        # Bucket Selection Section
+        bucket_frame = ttk.LabelFrame(self.root, text="Bucket Selection", padding=10)
+        bucket_frame.pack(fill="x", padx=10, pady=5)
+        
+        ttk.Label(bucket_frame, text="Select measurement types to download:").grid(
+            row=0, column=0, columnspan=3, sticky="w", pady=(0, 5)
+        )
+        
+        ttk.Checkbutton(
+            bucket_frame, 
+            text="Auto (automatic measurements)", 
+            variable=self.bucket_auto,
+            command=self.save_config
+        ).grid(row=1, column=0, sticky="w", padx=5, pady=2)
+        
+        ttk.Checkbutton(
+            bucket_frame, 
+            text="Manual (user-initiated measurements)", 
+            variable=self.bucket_manual,
+            command=self.save_config
+        ).grid(row=1, column=1, sticky="w", padx=5, pady=2)
+        
+        ttk.Checkbutton(
+            bucket_frame, 
+            text="Monitoring (validation/calibration measurements)", 
+            variable=self.bucket_monitoring,
+            command=self.save_config
+        ).grid(row=1, column=2, sticky="w", padx=5, pady=2)
         
         # Date Range Section
         date_frame = ttk.LabelFrame(self.root, text="Date Range", padding=10)
@@ -274,6 +319,11 @@ class BactoCloudDownloader:
         if not selected_indices:
             messagebox.showwarning("Warning", "Please select at least one device")
             return
+        
+        # Check if at least one bucket is selected
+        if not (self.bucket_auto.get() or self.bucket_manual.get() or self.bucket_monitoring.get()):
+            messagebox.showwarning("Warning", "Please select at least one bucket type")
+            return
             
         self.selected_devices = [self.devices[i] for i in selected_indices]
         
@@ -302,6 +352,21 @@ class BactoCloudDownloader:
                 
                 self.log(f"\nProcessing device: {device_serial}")
                 
+                # Build bucket list based on selection
+                buckets = []
+                if self.bucket_auto.get():
+                    buckets.append("auto")
+                if self.bucket_manual.get():
+                    buckets.append("manual")
+                if self.bucket_monitoring.get():
+                    buckets.append("monitoring")
+                
+                # Log selected buckets
+                if buckets:
+                    self.log(f"  Buckets: {', '.join(buckets)}")
+                else:
+                    self.log(f"  Warning: No buckets selected, downloading all data")
+                
                 # Prepare filter for data query
                 filter_data = {
                     "deviceIDs": [device_id],
@@ -310,6 +375,10 @@ class BactoCloudDownloader:
                     "pageSize": 100,
                     "page": 1
                 }
+                
+                # Add buckets filter if any are selected
+                if buckets:
+                    filter_data["buckets"] = buckets
                 
                 # Get data list
                 response = requests.post(
