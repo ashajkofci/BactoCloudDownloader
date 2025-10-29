@@ -1,0 +1,3811 @@
+{
+  "schemes": [
+    "https"
+  ],
+  "swagger": "2.0",
+  "info": {
+    "description": "The BactoCloud Public API provides programmatic access to your organization's bacterial monitoring data and device infrastructure. All endpoints are accessible at `/api/v1/` and require API key authentication.\n\n## Available Endpoints\n\n### Device Management (`/api/v1/device`)\n\nMonitor and control your deployed Bactosense hardware:\n- **List Devices** - Retrieve all devices in your organization with current status and configuration\n- **Device Details** - Get comprehensive information for a specific device including hardware specs and location\n- **Send Commands** - Remotely trigger device actions (calibration, sampling, configuration changes)\n- **Command Status** - Query pending, active, and historical commands for any device\n- **Cancel Commands** - Abort pending commands before execution\n\n### Data Access (`/api/v1/data`)\n\nRetrieve bacterial measurements and water quality data:\n- **Query Data** - Search measurements with flexible filters (date range, device ID, measurement type)\n- **Single Record** - Get detailed information for a specific measurement including all metadata\n- **Download Files** - Access raw data files and flow cytometry (FCS) files\n- **Export Data** - Generate CSV/Excel exports of filtered datasets for external analysis\n\nData includes bacterial counts (TCC, ICC, HNA, LNA), flow cytometry parameters, water temperature, flow rates, and custom computed metrics.\n\n### Alarm Management (`/api/v1/alarm`)\n\nMonitor alert configurations and history:\n- **List Alarms** - Get all configured alarm rules with thresholds and notification settings\n- **Alarm History** - Query triggered alarms with filters for time range, device, and severity\n- **Acknowledge Alarms** - Mark alarms as reviewed to clear active notifications\n\nAlarms can be configured for bacterial thresholds, device health issues, and custom computed values.\n\n## Authentication\n\nAll API requests require authentication using Organization API Keys. These keys are scoped to your organization and can have different permission levels:\n\n**Required Header:**\n```\nAuthorization: Bearer YOUR_API_KEY\n```\n\n**Generating API Keys:**\nOrganization administrators can generate API keys through the BactoCloud web interface under Organization Settings \u2192 API Keys. Each key can be configured with specific permissions (read-only, read-write, export, etc.).\n\n**Security Best Practices:**\n- Store API keys securely (environment variables, secrets management)\n- Use separate keys for different applications/environments\n- Rotate keys periodically and immediately if compromised\n- Assign minimal required permissions to each key\n- Monitor API key usage through audit logs\n\nAll requests must be made over HTTPS. HTTP requests will be rejected.\n\n## Rate Limiting\n\nTo ensure fair usage and platform stability, API endpoints are rate-limited:\n\n- **Standard Endpoints**: 100 requests per minute\n- **Query Endpoints**: Rate limits apply per API key\n\nWhen you exceed rate limits, you'll receive a `429 Too Many Requests` response. The response includes `Retry-After` header indicating when you can retry.\n\n**Rate Limit Headers:**\n- `X-RateLimit-Limit` - Maximum requests allowed in the time window\n- `X-RateLimit-Remaining` - Requests remaining in current window\n- `X-RateLimit-Reset` - Unix timestamp when the limit resets\n\n## Permissions & Access Control\n\nAPI keys have permissions based on what you assign when creating them:\n\n**Device Permissions:**\n- `device:read` - View device information and status\n- `device:write` - Send commands and modify device configuration\n\n**Data Permissions:**\n- `data:read` - Query and retrieve measurements\n- `data:export` - Generate data exports\n\n**Alarm Permissions:**\n- `alarm:read` - View alarm configurations and history\n- `alarm:acknowledge` - Mark alarms as reviewed\n\nYour API key's permissions are validated on each request. Insufficient permissions return a `403 Forbidden` response.\n\n## Response Format\n\nAll responses are in JSON format with consistent structure:\n\n**Success Response:**\n```json\n{\n\"message\": \"Operation completed successfully\",\n\"data\": { ... },\n\"dataType\": 1\n}\n```\n\nThe `dataType` field is an integer enum indicating the type of data returned:\n- `1` - Device\n- `5` - Command\n- `7` - Data/Measurement\n- `11` - Alarm Configuration\n- `12` - Alarm/Alert\n\n**Error Response:**\n```json\n{\n\"error\": \"User-friendly error message\",\n\"errorMessage\": \"Detailed error context (if available)\",\n\"errorCode\": 1220\n}\n```\n\nCommon error codes:\n- `1220` - Invalid API Key\n- `1230` - Invalid Request\n- `1310` - Device Not Found\n- `1340` - Rate Limit Exceeded\n- `3040` - Database Device Error\n- `3050` - Database Data Error\n- `9404` - Not Found\n\n**Common HTTP Status Codes:**\n- `200 OK` - Successful request\n- `201 Created` - Resource created successfully\n- `400 Bad Request` - Invalid request parameters\n- `401 Unauthorized` - Missing or invalid API key\n- `403 Forbidden` - Insufficient permissions\n- `404 Not Found` - Resource doesn't exist\n- `429 Too Many Requests` - Rate limit exceeded\n- `500 Internal Server Error` - Server-side error\n\n## Getting Started\n\n1. **Generate an API Key** - Log into BactoCloud web interface \u2192 Organization Settings \u2192 API Keys\n2. **Test Connection** - Make a GET request to `/api/v1/device` to list your devices\n3. **Query Your Data** - Use POST `/api/v1/data/list` with date range filters to retrieve measurements\n4. **Set Up Monitoring** - Integrate alarm history endpoint into your monitoring dashboards\n\nFor detailed examples and code snippets, visit our [API Documentation Portal](https://docs.bactocloud.com/api).",
+    "title": "BactoCloud Public API",
+    "contact": {
+      "name": "API Support",
+      "url": "https://www.bactocloud.com/support",
+      "email": "support@bactocloud.com"
+    },
+    "version": "1.0.0"
+  },
+  "host": "api.bactocloud.com",
+  "basePath": "/",
+  "paths": {
+    "/api/v1/alarm": {
+      "get": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Fetches all alarm configurations that have been set up for your organization. Each configuration defines when alarms should trigger and how you'll be notified.\n\n**What you'll get:**\nEach alarm configuration includes the device it monitors, threshold values that trigger alerts, and notification settings like email or SMS. You'll also see if the alarm is currently enabled and when it was created.\n\n**Authentication:**\nRequires `PermAlarmsView` permission when using the public API route `/api/v1/alarm`",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "alarm"
+        ],
+        "summary": "Get Alarm Configurations",
+        "responses": {
+          "200": {
+            "description": "Array of alarm configurations including thresholds, conditions, notification settings, and associated device parameters",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/server.CloudAlarmConfig"
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid request format or missing required parameters",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - Database query failed or server error during configuration retrieval",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alarm/acknowledge/{id}": {
+      "post": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Marks an alarm as acknowledged, indicating that someone has seen it and is taking care of the issue. This stops further notifications for this specific alarm.\n\n**What Happens:**\nWhen you acknowledge an alarm, we record the current timestamp and your user ID (if available). The alarm status changes to acknowledged, and you won't receive duplicate notifications for this incident.\n\n**Audit Trail:**\nAll acknowledgments are logged for compliance and tracking purposes, so you can see who acknowledged what and when.\n\n**Authentication:**\nRequires `PermAlarmsAcknowledge` permission when using the public API.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "alarm"
+        ],
+        "summary": "Acknowledge Single Alarm",
+        "parameters": [
+          {
+            "type": "string",
+            "format": "objectId",
+            "description": "Unique alarm identifier (ObjectID)",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alarm successfully acknowledged with updated status and audit information",
+            "schema": {
+              "$ref": "#/definitions/handlers.ResponseMessage"
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid alarm ID format or malformed request",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to acknowledge alarms or alarm belongs to different organization",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "404": {
+            "description": "Not Found - Alarm does not exist or has been deleted",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - Database update failed or server error during acknowledgment",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/alarm/acknowledge_multiple": {
+      "post": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Acknowledges multiple alarms at once by providing a list of alarm IDs. Useful for bulk operations when you're dealing with several related alarms.\n\n**Batch Processing:**\nEach alarm in the list gets individually processed - if one fails, the others will still be acknowledged. We record timestamps and user information for each successful acknowledgment.\n\n**What Happens:**\nFor each alarm that belongs to your organization, we mark it as acknowledged with the current timestamp and your user ID. Failed acknowledgments are silently skipped.\n\n**Audit Trail:**\nEach successful acknowledgment is logged separately for compliance tracking.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "alarm"
+        ],
+        "summary": "Acknowledge Multiple Alarms",
+        "parameters": [
+          {
+            "description": "List of alarm IDs to acknowledge",
+            "name": "alarms_id",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/handlers.AcknowledgeAlarmsHandlerQuery"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Alarm successfully acknowledged with updated status and audit information",
+            "schema": {
+              "$ref": "#/definitions/handlers.ResponseMessage"
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid alarm ID format or malformed request",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to acknowledge alarms or alarm belongs to different organization",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "404": {
+            "description": "Not Found - Alarm does not exist or has been deleted",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - Database update failed or server error during acknowledgment",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/export": {
+      "post": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Exports your measurement data to downloadable files in CSV, JSON, or Excel formats. Great for data analysis, creating reports, or importing into other systems.\n\n**Export Formats:**\nChoose from CSV (spreadsheet-friendly), JSON (for programming), or Excel (with formatting). You can specify which fields to include and filter by time range or devices.\n\n**Large Exports:**\nBig exports are processed in the background, so you don't have to wait around. You'll get progress updates and can download when ready.\n\n**Required Permissions:**\nFrontend users need `PermDataExport` permission, while API users need `PermDataView` permission.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json",
+          "text/csv",
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ],
+        "tags": [
+          "data"
+        ],
+        "summary": "Export Data to File",
+        "parameters": [
+          {
+            "description": "Export configuration specifying format, filters, and output options. Example: {\\",
+            "name": "export",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/server.ExportConfig"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Exported file content with appropriate Content-Type headers. Format depends on the requested export type (CSV, JSON, or Excel).",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid export configuration, unsupported format, or missing required parameters",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to export data from specified devices",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - Export processing failed or server encountered an error during file generation",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/fcs/{file_id}": {
+      "get": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Parses FCS (Flow Cytometry Standard) files and returns the data as JSON arrays that you can use for analysis and visualization.\n\n**What You'll Get:**\nThe FCS file is converted from its binary format into structured JSON containing all measurement parameters (like forward scatter, side scatter, fluorescence channels), plus metadata about how the data was acquired.\n**Response Details:**\n\nReturns structured arrays of measurement values extracted from the FCS file, including:\n- **Parameter Values**: Individual measurement parameters (e.g., FSC, SSC, FL1, FL2)\n- **Metadata**: File metadata including acquisition settings and instrument details\n\n**FCS Data Structure:**\n\nThe FCS data is converted from binary to JSON format, preserving all relevant measurement and metadata for analysis.\n**Authentication:**\nRequires `PermDataView` permission when using the public API.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "data"
+        ],
+        "summary": "Get FCS Flow Cytometry Data",
+        "parameters": [
+          {
+            "type": "string",
+            "format": "objectId",
+            "description": "Unique file identifier (ObjectID)",
+            "name": "file_id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Structured FCS data as JSON arrays containing parameter values, compensation matrices, and metadata",
+            "schema": {
+              "$ref": "#/definitions/server.FCSData"
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid file ID format or file reference not found",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to access this file or associated data record",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "404": {
+            "description": "Not Found - File does not exist or has been deleted",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - File retrieval or parsing failed",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/file/{file_id}": {
+      "get": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Downloads files associated with measurement data, such as FCS files for flow cytometry analysis, diagnostic images, or CSV reports.\n\n**File Types:**\n\n- **FCS Files**: Flow cytometry standard files (.fcs)\n- **Images**: PNG from dot plots\n- **Diagnostics**: CSV files with diagnostic data (.csv)\n\n**Response Headers:**\n\n- `Content-Type`: Appropriate MIME type for the file format\n- `Content-Disposition`: Attachment header with original filename\n- File size and modification information when available\n\n**File Processing:**\n\nFiles are automatically decompressed and served with appropriate headers for browser download or inline viewing based on file type.\n\n**Authentication:**\nRequires `PermDataView` permission when using the public API.",
+        "produces": [
+          "application/octet-stream",
+          "image/png",
+          "text/csv",
+          "application/json"
+        ],
+        "tags": [
+          "data"
+        ],
+        "summary": "Download Data File",
+        "parameters": [
+          {
+            "type": "string",
+            "format": "objectId",
+            "description": "Unique file identifier (ObjectID)",
+            "name": "file_id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "File content with appropriate Content-Type and Content-Disposition headers. File type depends on the original file format.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid file ID format or file reference not found",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to access this file or associated data record",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "404": {
+            "description": "Not Found - File does not exist or has been deleted",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - File retrieval failed or storage system error",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/list": {
+      "post": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Fetches measurement data from your devices based on filters you specify. You can search by device, time range, measurement type, and much more.\n\n**Data Buckets (Bucket enum):**\n- `\"auto\"` (BucketAuto): Automatic measurements triggered by device schedule\n- `\"manual\"` (BucketManual): Manual measurements initiated by user action\n- `\"monitoring\"` (BucketValidation): Validation mode measurements for beads calibration and quality control\n- `\"autosampler\"` (BucketAutosampler): Measurements from BactoSense multi-channel autosampler devices\n\n**Filter Types (FilterType enum for DataFilterConfig):**\n- `\"in\"`: Match any value in provided array (e.g., name in [\"Sample1\", \"Sample2\"])\n- `\"eq\"`: Exact equality match (e.g., bucket equals \"auto\")\n- `\"gt\"`: Greater than comparison for numeric values (e.g., validRatio > 0.8)\n- `\"gte\"`: Greater than or equal comparison (e.g., timestamp >= startDate)\n- `\"lt\"`: Less than comparison for numeric values (e.g., events < 1000)\n- `\"lte\"`: Less than or equal comparison (e.g., volume <= 10.0)\n- `\"contains\"`: Case-insensitive string contains match with regex escaping (e.g., name contains \"water\")\n- `\"regex\"`: Regular expression pattern matching (e.g., name matches \"^Sample.*[0-9]+$\")\n- `\"exists\"`: Check if field exists in document (e.g., description field is present)\n\n**Computation Types (ComputationType enum):**\n- `\"TCC\"`: Total Cell Count - Total number of particles detected\n- `\"ICC\"`: Intact Cell Count - Number of intact/viable cells with intact membranes\n- `\"ACC\"`: Active Cell Count - Number of metabolically active cells\n- `\"HNAC\"`: High Nucleic Acid Content cells - Typically bacteria with high DNA/RNA\n- `\"HACC\"`: High Active Cell Count - Active cells with high metabolic activity\n- `\"HNAP\"`: High Nucleic Acid Percentage - Ratio of HNAC to total count\n- `\"HACP\"`: High Active Cell Percentage - Ratio of HACC to total count\n- `\"LNAC\"`: Low Nucleic Acid Content cells - Typically damaged or inactive bacteria\n- `\"LACC\"`: Low Active Cell Count - Cells with minimal metabolic activity\n- `\"GATEPLUS\"`: Enhanced gating analysis with advanced particle classification\n- `\"Calculation\"`: Custom mathematical calculations based on measurement parameters\n- `\"Embedding\"`: Machine learning feature embeddings for advanced analysis\n- `\"EmbeddingHNA\"`: Specialized embeddings for High Nucleic Acid analysis\n- `\"BactoScoreComponents\"`: Individual components of the proprietary BactoScore algorithm\n\n**Sort Order Options:**\n- `\"asc\"`: Ascending order (oldest to newest for timestamps, A-Z for strings, lowest to highest for numbers)\n- `\"desc\"`: Descending order (newest to oldest for timestamps, Z-A for strings, highest to lowest for numbers)\n\n**Filter Options:**\n\n- **Device filtering**: Specify device IDs to include (supports virtual devices)\n- **Time range**: Start and end timestamps for temporal filtering\n- **Bucket filtering**: Limit to specific data types/measurement modes\n- **Pagination**: Page number and page size for result batching\n- **Sorting**: Configurable sort order and fields\n- **Data field filtering**: Apply advanced filters using DataFilterConfig with various operators\n- **Computation filtering**: Filter by computation types and result values using ComputationFilterConfig\n**Authentication:**\nRequires `PermDataView` permission when using the public API.\n",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "data"
+        ],
+        "summary": "Get Filtered Device Data",
+        "parameters": [
+          {
+            "description": "Data filter configuration specifying devices, time range, measurement types, and pagination options",
+            "name": "filter",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/server.DataFilter"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Filtered data results with metadata. Includes data array, total count, and query execution time for performance monitoring.",
+            "schema": {
+              "$ref": "#/definitions/handlers.GetDataResponse"
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid filter parameters, malformed request body, or unsupported filter criteria",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to access specified devices or data types",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - Database query failed or server encountered an unexpected error",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/data/{id}": {
+      "get": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Fetches complete details for a specific measurement record. Perfect when you need all the information about a particular measurement, including the raw data files.\n\n**What You'll Get:**\nThe full data record including timestamps, device settings when the measurement was taken, all calculated values (cell counts, ratios, scores), and references to associated files like FCS data or diagnostic images.\n\n**File Access:**\nThe response includes file IDs that you can use to download the actual FCS files, images, or diagnostic data through separate API calls.\n\n**Authentication:**\nRequires `PermDataView` permission when using the public API.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "data"
+        ],
+        "summary": "Get Single Data Record",
+        "parameters": [
+          {
+            "type": "string",
+            "format": "objectId",
+            "description": "Unique data record identifier (ObjectID)",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete data record with all measurements, metadata, file references, and associated device information",
+            "schema": {
+              "$ref": "#/definitions/server.Data"
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid data ID format or malformed request",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to access this data record or associated device",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "404": {
+            "description": "Not Found - Data record does not exist or is not accessible",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - Database query failed or server error",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device": {
+      "get": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Returns all devices in your organization, including their current status and configuration. By default includes both physical devices and virtual devices (BactoSwitch lines).\n\n**Filtering Options:**\nUse the `no_virtual` parameter to exclude virtual devices if you only want to see physical hardware.\n\n**What's Included:**\nEach device shows its name, serial number, location, current operational status, and connection state.\n\n**Authentication:**\nRequires `PermDeviceView` permission when using the public API.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "device"
+        ],
+        "summary": "Get All Devices",
+        "parameters": [
+          {
+            "type": "boolean",
+            "description": "Set to 'true' to exclude virtual devices (BactoSwitch lines) from the response. Default: false (includes all devices)",
+            "name": "no_virtual",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of devices with status information. Each device includes ID, name, serial number, location, organization details, and current operational status.",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/server.Device"
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid or missing authentication token",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to view devices",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal server error - Database connection issues or server malfunction",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device/command": {
+      "post": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "**Execution Flow:**\n1. Command is validated and stored with status 'pending'\n2. Device polls for commands\n3. Device executes command and acknowledges\n4. Command status is updated to 'completed' or 'failed'\n\n**Command Types (CommandType enum):**\n- `10` (CommandTypeSetSettings): Update device settings using JSON Schema validation\n- `20` (CommandTypeReboot): Restart the device\n- `21` (CommandTypeShutdown): Shutdown the device\n- `30` (CommandTypeStartManualProtocol): Start manual protocol execution\n- `31` (CommandTypeAbort): Abort current operation\n- `32` (CommandTypeClearErrors): Clear device error states\n- `33` (CommandTypeStartAutoProtocol): Start automatic protocol execution\n- `40` (CommandTypeRefreshInfo): Refresh device information\n- `41` (CommandTypeSelfCheck): Perform device self-check\n- `42` (CommandTypeUpdate): Update device firmware\n\n**Command Status Values (CommandStatus enum):**\n- `0` (CommandStatusUnknown): Unknown status\n- `1` (CommandStatusPending): Waiting to be executed\n- `2` (CommandStatusCompleted): Successfully executed\n- `3` (CommandStatusFailed): Failed to execute but will retry later\n- `4` (CommandStatusError): Failed to execute and will not retry\n- `5` (CommandStatusCancelled): Cancelled by user\n- `6` (CommandStatusWorking): Currently being executed\n- `7` (CommandStatusCancelledTimeout): Cancelled by timeout\n- `8` (CommandStatusQueued): Queued for execution (manager already running)\n\n**Protocol Names (CommandProtocolName enum):**\n- `\"\"` (CommandProtocolNameUnknown): Unknown protocol\n- `\"analysis_water\"` (CommandProtocolAnalysisWater): Water analysis protocol\n- `\"beads\"` (CommandProtocolBeads): Beads analysis protocol\n- `\"cartridge_change\"` (CommandProtocolCartridgeChange): Cartridge replacement\n- `\"cartridge_close\"` (CommandProtocolCartridgeClose): Cartridge closing\n- `\"clean_optics\"` (CommandProtocolCleanOptics): Optics cleaning\n- `\"clean_sample\"` (CommandProtocolCleanSamplingDevice): Sampling device cleaning\n- `\"clean_washstation\"` (CommandProtocolCleanWashstation): Washstation cleaning\n- `\"fill_tubing\"` (CommandProtocolFillTubing): Tubing filling\n- `\"prime_no_clean\"` (CommandProtocolPrime): Priming without cleaning\n- `\"prime_clean\"` (CommandProtocolPrimeClean): Priming with cleaning\n- `\"analysis_water_backflush\"` (CommandProtocolAnalysisWaterAuto): Automatic water analysis with backflush\n- `\"beads_auto\"` (CommandProtocolBeadsAuto): Automatic beads analysis\n- `\"sosd_auto\"` (CommandProtocolSosdAuto): Automatic SOSD protocol\n\n**Bucket Types (Bucket enum):**\n- `\"auto\"` (BucketAuto): Automatic measurements\n- `\"manual\"` (BucketManual): Manual measurements\n- `\"monitoring\"` (BucketValidation): Validation mode for beads and monitoring\n- `\"autosampler\"` (BucketAutosampler): For BS multi devices\n- `\"errors\"` (BucketErrors): Failed protocols not inserted into auto/manual\n- `\"self_check\"` (BucketSelfCheck): Self-check results\n- `\"log\"` (BucketProtocolLog): Protocol log entries\n- `\"service\"` (BucketService): Cleaning protocols and maintenance\n- `\"powerlog\"` (BucketPowerLog): Power log entries\n- `\"interventions\"` (BucketInterventions): Service interventions\n\n**Authentication:**\nRequires `PermDeviceEdit` permission when using the public API.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "device"
+        ],
+        "parameters": [
+          {
+            "description": "Command configuration including device ID, command type, and parameters",
+            "name": "command",
+            "in": "body",
+            "required": true,
+            "schema": {
+              "$ref": "#/definitions/server.DeviceCommand"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Command successfully queued for execution",
+            "schema": {
+              "$ref": "#/definitions/handlers.ResponseMessage"
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid command format, unsupported command type, or validation errors",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to send commands to this device",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - Database error or command processing failure",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device/command/{command_id}": {
+      "delete": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Cancels a pending or failed command in the database. Only commands with status 'pending' or 'failed' can be cancelled. Commands that are already running or completed cannot be cancelled for safety reasons.\n\n**Authentication:**\n- **Public API Route** (`/api/v1/device/command/{command_id}`): Requires organization-level JWT API key with `PermDeviceEdit` permission\n\n**Cancellation Rules:**\n/ - \u2705 **Pending commands**: Can be cancelled before device polls for them\n/ - \u2705 **Failed commands**: Can be cancelled to clear from queue\n/ - \u274c **Running commands**: Cannot be cancelled once execution has started\n/ - \u274c **Completed commands**: Cannot be cancelled after successful execution\n\n**Safety Considerations:**\n/ Cancelling commands prevents potential conflicts and ensures device state consistency. Commands in progress cannot be cancelled to avoid leaving devices in undefined states.",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "device"
+        ],
+        "summary": "Cancel Device Command",
+        "parameters": [
+          {
+            "type": "string",
+            "format": "objectId",
+            "description": "Unique command identifier to cancel",
+            "name": "command_id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Command successfully cancelled",
+            "schema": {
+              "$ref": "#/definitions/handlers.ResponseMessage"
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid command ID format or command cannot be cancelled",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to cancel device commands",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "404": {
+            "description": "Not Found - Command does not exist or is not accessible",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - Database update failed or server error",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device/command/{device_id}": {
+      "get": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Retrieves the command history for a specific device, including command status, execution timestamps, and results. Commands are returned in chronological order with a configurable limit (default: 100 most recent commands).\n\n**Authentication:**\n- **Public API Route** (`/api/v1/device/command/{device_id}`): Requires organization-level JWT API key with `PermDeviceView` permission\n\n**Response Details:**\nReturns command objects with full execution history including:\n- Command type and parameters\n- Creation and execution timestamps\n- Status (pending, running, completed, failed, cancelled)\n- Execution results and error messages\n- User who initiated the command\n\n**Command Types (CommandType enum):**\n- `10` (CommandTypeSetSettings): Update device settings using JSON Schema validation\n- `20` (CommandTypeReboot): Restart the device\n- `21` (CommandTypeShutdown): Shutdown the device\n- `30` (CommandTypeStartManualProtocol): Start manual protocol execution\n- `31` (CommandTypeAbort): Abort current operation\n- `32` (CommandTypeClearErrors): Clear device error states\n- `33` (CommandTypeStartAutoProtocol): Start automatic protocol execution\n- `40` (CommandTypeRefreshInfo): Refresh device information\n- `41` (CommandTypeSelfCheck): Perform device self-check\n- `42` (CommandTypeUpdate): Update device firmware\n\n**Command Status Values (CommandStatus enum):**\n- `0` (CommandStatusUnknown): Unknown status\n- `1` (CommandStatusPending): Command queued, waiting for device to poll\n- `2` (CommandStatusCompleted): Command executed successfully\n- `3` (CommandStatusFailed): Command execution failed with error\n- `4` (CommandStatusError): Failed to execute and will not retry\n- `5` (CommandStatusCancelled): Command was cancelled before execution\n- `6` (CommandStatusWorking): Device received command and started execution\n- `7` (CommandStatusCancelledTimeout): Cancelled by timeout\n- `8` (CommandStatusQueued): Queued for execution (manager already running)\n\n**Protocol Names (CommandProtocolName enum):**\n- `\"\"` (CommandProtocolNameUnknown): Unknown protocol\n- `\"analysis_water\"` (CommandProtocolAnalysisWater): Water analysis protocol\n- `\"beads\"` (CommandProtocolBeads): Beads analysis protocol\n- `\"cartridge_change\"` (CommandProtocolCartridgeChange): Cartridge replacement\n- `\"cartridge_close\"` (CommandProtocolCartridgeClose): Cartridge closing\n- `\"clean_optics\"` (CommandProtocolCleanOptics): Optics cleaning\n- `\"clean_sample\"` (CommandProtocolCleanSamplingDevice): Sampling device cleaning\n- `\"clean_washstation\"` (CommandProtocolCleanWashstation): Washstation cleaning\n- `\"fill_tubing\"` (CommandProtocolFillTubing): Tubing filling\n- `\"prime_no_clean\"` (CommandProtocolPrime): Priming without cleaning\n- `\"prime_clean\"` (CommandProtocolPrimeClean): Priming with cleaning\n- `\"analysis_water_backflush\"` (CommandProtocolAnalysisWaterAuto): Automatic water analysis with backflush\n- `\"beads_auto\"` (CommandProtocolBeadsAuto): Automatic beads analysis\n- `\"sosd_auto\"` (CommandProtocolSosdAuto): Automatic SOSD protocol\n\n**Bucket Types (Bucket enum):**\n- `\"auto\"` (BucketAuto): Automatic measurements\n- `\"manual\"` (BucketManual): Manual measurements\n- `\"monitoring\"` (BucketValidation): Validation mode for beads and monitoring\n- `\"autosampler\"` (BucketAutosampler): For BS multi devices\n- `\"errors\"` (BucketErrors): Failed protocols not inserted into auto/manual\n- `\"self_check\"` (BucketSelfCheck): Self-check results\n- `\"log\"` (BucketProtocolLog): Protocol log entries\n- `\"service\"` (BucketService): Cleaning protocols and maintenance\n- `\"powerlog\"` (BucketPowerLog): Power log entries\n- `\"interventions\"` (BucketInterventions): Service interventions",
+        "consumes": [
+          "application/json"
+        ],
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "device"
+        ],
+        "summary": "Get Device Command History",
+        "parameters": [
+          {
+            "type": "string",
+            "format": "objectId",
+            "description": "Device ID to filter commands by. If not provided, returns commands for all devices in organization",
+            "name": "device_id",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "List of device commands with execution status and history",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/server.DeviceCommand"
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid device ID format",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or session expired",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Insufficient permissions to view device commands",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - Database query failed or server error",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/device/{id}": {
+      "get": {
+        "security": [
+          {
+            "JWT": []
+          }
+        ],
+        "description": "Fetches complete information about a specific device, including its current status, configuration, and location details.\n\n**Device Information:**\nGet real-time status, configuration settings, location data, service history, and operational metrics. For virtual devices (BactoSwitch lines), you'll also see stream-specific settings.\n\n**Authentication:**\nRequires `PermDeviceView` permission when using the public API.",
+        "produces": [
+          "application/json"
+        ],
+        "tags": [
+          "device"
+        ],
+        "summary": "Get Device Details",
+        "parameters": [
+          {
+            "type": "string",
+            "format": "objectId",
+            "description": "Unique device identifier (ObjectID)",
+            "name": "id",
+            "in": "path",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Complete device information including status, configuration, location, and operational data",
+            "schema": {
+              "$ref": "#/definitions/server.Device"
+            }
+          },
+          "400": {
+            "description": "Bad Request - Invalid device ID format or missing required parameters",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "401": {
+            "description": "Unauthorized - Invalid authentication token or insufficient permissions",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "403": {
+            "description": "Forbidden - Device access denied due to insufficient permissions",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "404": {
+            "description": "Not Found - Device does not exist or user lacks access permissions",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          },
+          "500": {
+            "description": "Internal Server Error - Database connection issues or server malfunction",
+            "schema": {
+              "$ref": "#/definitions/server.ErrorResponse"
+            }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "handlers.AcknowledgeAlarmsHandlerQuery": {
+      "type": "object",
+      "properties": {
+        "alarmsID": {
+          "description": "List of alarm IDs to acknowledge",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "handlers.GetDataResponse": {
+      "type": "object",
+      "properties": {
+        "count": {
+          "type": "integer",
+          "example": 1254
+        },
+        "data": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.Data"
+          }
+        },
+        "duration_us": {
+          "type": "integer",
+          "example": 45230
+        }
+      }
+    },
+    "handlers.ResponseMessage": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "description": "This is an interface{} type which can hold any type of data, usually the whole object that was created or updated in the database"
+        },
+        "dataType": {
+          "description": "This is the type of data that was created or updated in the database. It is used to determine how the data should be displayed in the client",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.DataType"
+            }
+          ]
+        },
+        "message": {
+          "description": "This is the confirmation message. It is not translated",
+          "type": "string"
+        }
+      }
+    },
+    "server.Alarm": {
+      "type": "object",
+      "properties": {
+        "condition": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "threshold": {
+          "type": "number"
+        }
+      }
+    },
+    "server.AlarmSeverity": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "x-enum-varnames": [
+        "AlarmSeverityNone",
+        "AlarmSeverityInfo",
+        "AlarmSeverityWarning",
+        "AlarmSeverityCritical"
+      ]
+    },
+    "server.BeadsFitDetail": {
+      "type": "object",
+      "properties": {
+        "cv": {
+          "type": "number"
+        },
+        "iterations": {
+          "type": "integer"
+        },
+        "mean": {
+          "type": "number"
+        },
+        "median": {
+          "type": "number"
+        }
+      }
+    },
+    "server.Bucket": {
+      "type": "string",
+      "enum": [
+        "auto",
+        "manual",
+        "monitoring",
+        "autosampler",
+        "errors",
+        "self_check",
+        "log",
+        "service",
+        "powerlog",
+        "interventions",
+        "syslog"
+      ],
+      "x-enum-comments": {
+        "BucketAutosampler": "For BS multi",
+        "BucketErrors": "Protocols that failed and were not inserted into \"auto\" or \"manual\" have an entry here",
+        "BucketInterventions": "A bucket for service interventions",
+        "BucketPowerLog": "A bucket for power logs",
+        "BucketProtocolLog": "Protocol log.",
+        "BucketSelfCheck": "Results of self checks",
+        "BucketService": "A bucket for cleaning protocols, etc...",
+        "BucketSyslog": "A bucket for syslog messages",
+        "BucketValidation": "Validation mode, for beads and validation measurement"
+      },
+      "x-enum-varnames": [
+        "BucketAuto",
+        "BucketManual",
+        "BucketValidation",
+        "BucketAutosampler",
+        "BucketErrors",
+        "BucketSelfCheck",
+        "BucketProtocolLog",
+        "BucketService",
+        "BucketPowerLog",
+        "BucketInterventions",
+        "BucketSyslog"
+      ]
+    },
+    "server.CalculationType": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        12,
+        13
+      ],
+      "x-enum-comments": {
+        "CalculationTypeAbsDifference": "Sum of the absolute differences between embeddings",
+        "CalculationTypeAddition": "Addition of the counts",
+        "CalculationTypeBrayCurtisDissimilarity": "Bray-Curtis dissimilarity computed between the reference embedding and the source embedding",
+        "CalculationTypeCosineDissimilarity": "1 - cosine similarity between embeddings",
+        "CalculationTypeDivision": "Division of the counts",
+        "CalculationTypeInverseLogReduction": "Inverse logarithmic reduction",
+        "CalculationTypeLogReduction": "Logarithmic reduction",
+        "CalculationTypeMovingAverage": "Moving average computed by just averaging the reference data. it is in fact the addition of the reference data to 0 (i.e. the reference data is the output and the offset should be zero). Used with counts",
+        "CalculationTypeMovingStd": "Moving standard deviation computed by calculating the standard deviation of the reference data (if more than 1 element in the reference data)",
+        "CalculationTypeSubtraction": "Subtraction of the counts",
+        "CalculationTypeVectorDifference": "Sum of the differences between embeddings"
+      },
+      "x-enum-varnames": [
+        "CalculationTypeUnknown",
+        "CalculationTypeAddition",
+        "CalculationTypeSubtraction",
+        "CalculationTypeDivision",
+        "CalculationTypeVectorDifference",
+        "CalculationTypeCosineDissimilarity",
+        "CalculationTypeAbsDifference",
+        "CalculationTypeLogReduction",
+        "CalculationTypeInverseLogReduction",
+        "CalculationTypeMovingAverage",
+        "CalculationTypeBrayCurtisDissimilarity",
+        "CalculationTypeMovingStd"
+      ]
+    },
+    "server.CartridgeStatus": {
+      "type": "object",
+      "properties": {
+        "cartridgeCapacity": {
+          "description": "Capacity of the cartridge (should be 1000)",
+          "type": "number",
+          "example": 1000
+        },
+        "cartridgeCountBleach": {
+          "description": "Number of protocols that used bleach ran with this cartridge",
+          "type": "number",
+          "example": 12.5
+        },
+        "cartridgeCountDye": {
+          "description": "Number of protocols that used dye ran with this cartridge",
+          "type": "number",
+          "example": 25.3
+        },
+        "cartridgeCountRinse": {
+          "description": "Number of protocols that used rinse ran with this cartridge",
+          "type": "number",
+          "example": 45.1
+        },
+        "cartridgeCountSpare": {
+          "description": "Number of protocols that used spare ran with this cartridge",
+          "type": "number",
+          "example": 8.2
+        },
+        "cartridgeCountWaste": {
+          "description": "Number of protocols that used waste ran with this cartridge",
+          "type": "number",
+          "example": 67.8
+        },
+        "cartridgeGateType": {
+          "description": "Cartridge gate type => ICC, TCC, UVC, ACC, etc.",
+          "type": "string",
+          "example": "TCC"
+        },
+        "cartridgeLevel": {
+          "description": "Level of the cartridge from 0 to capacity",
+          "type": "number",
+          "example": 750.5
+        },
+        "cartridgeMotions": {
+          "description": "Number of motions of the cartridge valve",
+          "type": "integer",
+          "example": 245
+        },
+        "cartridgeReady": {
+          "description": "Is the cartridge ready (not ready = no cartridge, or not initialized)",
+          "type": "boolean"
+        },
+        "cartridgeSerial": {
+          "description": "Serial number of the cartridge (without bNo-)",
+          "type": "integer",
+          "example": 189284
+        },
+        "cartridgeType": {
+          "description": "Type of the cartridge (example ICC-A)",
+          "type": "string",
+          "example": "ICC-A"
+        },
+        "cartridge_expiry_date": {
+          "description": "Expiry date of the cartridge",
+          "type": "string",
+          "example": "2024-12-31T23:59:59Z"
+        },
+        "fillSerial": {
+          "description": "Serial number of the cartridge fill (with initial bNo-)",
+          "type": "string",
+          "example": "BNO-189284"
+        }
+      }
+    },
+    "server.ChangeIntervalConfiguration": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "newIntervalMinutes": {
+          "type": "integer",
+          "example": 30
+        }
+      }
+    },
+    "server.CloudAlarm": {
+      "type": "object",
+      "required": [
+        "alarmConfig",
+        "computation",
+        "computationID",
+        "deviceID"
+      ],
+      "properties": {
+        "acknowledged_at": {
+          "type": "string",
+          "example": "2024-01-15T11:00:00Z"
+        },
+        "acknowledged_by_user": {
+          "type": "string",
+          "example": "507f1f77bcf86cd799439015"
+        },
+        "actionAPICallAt": {
+          "type": "string",
+          "example": "2024-01-15T10:31:00Z"
+        },
+        "actionAPICallError": {
+          "type": "string",
+          "example": "HTTP 500 Internal Server Error"
+        },
+        "actionChangeAutoModeIntervalAt": {
+          "type": "string",
+          "example": "2024-01-15T10:32:00Z"
+        },
+        "actionChangeAutoModeIntervalOriginalInterval": {
+          "description": "In minutes",
+          "type": "integer",
+          "example": 60
+        },
+        "actionDOCallAt": {
+          "type": "string",
+          "example": "2024-01-15T10:31:15Z"
+        },
+        "actionDOCallError": {
+          "type": "string",
+          "example": "Device not responding"
+        },
+        "actionEmailSentAt": {
+          "description": "Actions",
+          "type": "string",
+          "example": "2024-01-15T10:30:00Z"
+        },
+        "actionEmailSentError": {
+          "type": "string",
+          "example": "SMTP connection failed"
+        },
+        "actionSMSSentAt": {
+          "type": "string",
+          "example": "2024-01-15T10:30:30Z"
+        },
+        "actionSMSSentError": {
+          "type": "string",
+          "example": "Invalid phone number"
+        },
+        "actionsProcessedAt": {
+          "description": "Other timestamps",
+          "type": "string",
+          "example": "2024-01-15T10:32:30Z"
+        },
+        "alarmConfig": {
+          "$ref": "#/definitions/server.CloudAlarmConfig"
+        },
+        "cloudAlarmConfigID": {
+          "type": "string",
+          "example": "507f1f77bcf86cd799439013"
+        },
+        "computation": {
+          "$ref": "#/definitions/server.Computation"
+        },
+        "computationID": {
+          "type": "string",
+          "example": "507f1f77bcf86cd799439014"
+        },
+        "created_at": {
+          "description": "Created in db",
+          "type": "string",
+          "example": "2024-01-15T10:29:45Z"
+        },
+        "deviceID": {
+          "type": "string",
+          "example": "507f1f77bcf86cd799439012"
+        },
+        "id": {
+          "type": "string"
+        },
+        "modified_at": {
+          "type": "string",
+          "example": "2024-01-15T11:00:00Z"
+        },
+        "organizationID": {
+          "description": "Organization ID",
+          "type": "string",
+          "example": "507f1f77bcf86cd799439011"
+        },
+        "severity": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.AlarmSeverity"
+            }
+          ],
+          "example": 2
+        },
+        "triggered_at": {
+          "description": "Timestamp of the alarm trigger",
+          "type": "string",
+          "example": "2024-01-15T10:29:45Z"
+        }
+      }
+    },
+    "server.CloudAlarmConfig": {
+      "type": "object",
+      "required": [
+        "bucket",
+        "comparison",
+        "computationType",
+        "deviceID",
+        "name",
+        "organizationID",
+        "thresholds"
+      ],
+      "properties": {
+        "actionChangeInterval": {
+          "description": "Change the auto mode interval",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.ChangeIntervalConfiguration"
+            }
+          ]
+        },
+        "actionDoCall": {
+          "description": "Update digital outputs on physical bactosense device. There are technical challenges for this (DO are overriden by the protocols) so we do not implement it for now.",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.DOCallConfiguration"
+            }
+          ]
+        },
+        "actionEmail": {
+          "description": "Actions",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.MessageConfiguration"
+            }
+          ]
+        },
+        "actionPushAPI": {
+          "description": "Push API configuration",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.PushAPIConfiguration"
+            }
+          ]
+        },
+        "actionSMS": {
+          "description": "SMS configuration",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.MessageConfiguration"
+            }
+          ]
+        },
+        "alarmCount": {
+          "description": "Statistics fields (populated by aggregation, not stored in DB)",
+          "type": "integer",
+          "example": 5
+        },
+        "bucket": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.Bucket"
+            }
+          ],
+          "example": "auto"
+        },
+        "comparison": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.ComparisonOperator"
+            }
+          ],
+          "example": "gt"
+        },
+        "computationType": {
+          "$ref": "#/definitions/server.ComputationType"
+        },
+        "created_at": {
+          "type": "string",
+          "example": "2024-01-15T10:30:00Z"
+        },
+        "created_by": {
+          "type": "string",
+          "example": "507f1f77bcf86cd799439013"
+        },
+        "deviceID": {
+          "type": "string",
+          "example": "507f1f77bcf86cd799439012"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "frontEndPresetID": {
+          "description": "Frontend preset ID",
+          "type": "string"
+        },
+        "id": {
+          "type": "string"
+        },
+        "lastAlarmAt": {
+          "type": "string",
+          "example": "2024-01-15T09:45:30Z"
+        },
+        "modified_at": {
+          "type": "string",
+          "example": "2024-01-15T10:30:00Z"
+        },
+        "name": {
+          "type": "string",
+          "maxLength": 100,
+          "example": "High Bacteria Count Alert"
+        },
+        "organizationID": {
+          "description": "Organization ID",
+          "type": "string",
+          "example": "507f1f77bcf86cd799439011"
+        },
+        "thresholds": {
+          "type": "array",
+          "maxItems": 3,
+          "minItems": 1,
+          "items": {
+            "$ref": "#/definitions/server.ThresholdPair"
+          }
+        }
+      }
+    },
+    "server.CommandArgs": {
+      "type": "object",
+      "properties": {
+        "bucket": {
+          "description": "Optional: bucket (service or auto)",
+          "type": "string",
+          "example": "auto"
+        },
+        "gates": {
+          "description": "Short name of the gate to use.",
+          "type": "string",
+          "example": "tcc_default"
+        },
+        "name": {
+          "description": "Name of sample",
+          "type": "string",
+          "example": "Water Analysis"
+        },
+        "protocol": {
+          "description": "Name of protocol to run",
+          "type": "string",
+          "example": "analysis_water"
+        },
+        "replications": {
+          "description": "Replications of main()",
+          "type": "integer",
+          "example": 1
+        }
+      }
+    },
+    "server.CommandParameters": {
+      "type": "object",
+      "additionalProperties": true
+    },
+    "server.CommandProtocolName": {
+      "type": "string",
+      "enum": [
+        "",
+        "analysis_water",
+        "beads",
+        "cartridge_change",
+        "cartridge_close",
+        "clean_optics",
+        "clean_sample",
+        "clean_washstation",
+        "fill_tubing",
+        "prime_no_clean",
+        "prime_clean",
+        "analysis_water_backflush",
+        "beads_auto",
+        "sosd_auto"
+      ],
+      "x-enum-varnames": [
+        "CommandProtocolNameUnknown",
+        "CommandProtocolAnalysisWater",
+        "CommandProtocolBeads",
+        "CommandProtocolCartridgeChange",
+        "CommandProtocolCartridgeClose",
+        "CommandProtocolCleanOptics",
+        "CommandProtocolCleanSamplingDevice",
+        "CommandProtocolCleanWashstation",
+        "CommandProtocolFillTubing",
+        "CommandProtocolPrime",
+        "CommandProtocolPrimeClean",
+        "CommandProtocolAnalysisWaterAuto",
+        "CommandProtocolBeadsAuto",
+        "CommandProtocolSosdAuto"
+      ]
+    },
+    "server.CommandProtocolParameters": {
+      "type": "object",
+      "properties": {
+        "bucket": {
+          "enum": [
+            "manual",
+            "monitoring",
+            "auto",
+            "service"
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.Bucket"
+            }
+          ],
+          "example": "auto"
+        },
+        "measurement_name": {
+          "type": "string",
+          "example": "Water Analysis Sample 1"
+        },
+        "protocol": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.CommandProtocolName"
+            }
+          ],
+          "example": "analysis_water_backflush"
+        },
+        "replications": {
+          "type": "integer",
+          "maximum": 5,
+          "minimum": 1,
+          "example": 1
+        },
+        "short_gate_name": {
+          "type": "string",
+          "example": "tcc_default"
+        }
+      }
+    },
+    "server.CommandStatus": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "x-enum-comments": {
+        "CommandStatusCancelled": "Cancelled by user",
+        "CommandStatusCancelledTimeout": "Cancelled by timeout",
+        "CommandStatusCompleted": "Successfully executed",
+        "CommandStatusError": "Failed to execute and will not retry",
+        "CommandStatusFailed": "Failed to execute but will retry later",
+        "CommandStatusPending": "Waiting to be executed",
+        "CommandStatusQueued": "Queued for execution, similar to failed but queued because the last error was \"manager already running\"",
+        "CommandStatusWorking": "Currently being executed"
+      },
+      "x-enum-varnames": [
+        "CommandStatusUnknown",
+        "CommandStatusPending",
+        "CommandStatusCompleted",
+        "CommandStatusFailed",
+        "CommandStatusError",
+        "CommandStatusCancelled",
+        "CommandStatusWorking",
+        "CommandStatusCancelledTimeout",
+        "CommandStatusQueued"
+      ]
+    },
+    "server.CommandType": {
+      "type": "integer",
+      "enum": [
+        10,
+        20,
+        21,
+        30,
+        31,
+        32,
+        33,
+        40,
+        41,
+        42,
+        43
+      ],
+      "x-enum-comments": {
+        "CommandTypeSendSyslog": "send syslog to data",
+        "CommandTypeSetSettings": "Settings are now validated using JSON Schema defined in schema.go. See SettingsSchemas for available settings.",
+        "CommandTypeStartAutoProtocol": "command parameter \"protocol\" is a CommandProtocolParameters",
+        "CommandTypeStartManualProtocol": "command parameter \"protocol\" is a CommandProtocolParameters"
+      },
+      "x-enum-varnames": [
+        "CommandTypeSetSettings",
+        "CommandTypeReboot",
+        "CommandTypeShutdown",
+        "CommandTypeStartManualProtocol",
+        "CommandTypeAbort",
+        "CommandTypeClearErrors",
+        "CommandTypeStartAutoProtocol",
+        "CommandTypeRefreshInfo",
+        "CommandTypeSelfCheck",
+        "CommandTypeUpdate",
+        "CommandTypeSendSyslog"
+      ]
+    },
+    "server.ComparisonOperator": {
+      "type": "string",
+      "enum": [
+        "lt",
+        "gt"
+      ],
+      "x-enum-varnames": [
+        "ComparisonOperatorLessThan",
+        "ComparisonOperatorGreaterThan"
+      ]
+    },
+    "server.Computation": {
+      "type": "object",
+      "required": [
+        "bucket",
+        "computationType",
+        "dataID",
+        "timestamp"
+      ],
+      "properties": {
+        "bucket": {
+          "description": "used for rabbit",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.Bucket"
+            }
+          ]
+        },
+        "computationType": {
+          "description": "used for rabbit",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.ComputationType"
+            }
+          ]
+        },
+        "configSnapshot": {
+          "description": "Config snapshot of custom computation (optional, stored in Computation)",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.ComputationConfig"
+            }
+          ]
+        },
+        "dataID": {
+          "description": "used for rabbit",
+          "type": "string"
+        },
+        "deviceID": {
+          "type": "string"
+        },
+        "results": {},
+        "timestamp": {
+          "description": "This should be part of the json, because it is used in the communication to rabbitmq",
+          "type": "string"
+        }
+      }
+    },
+    "server.ComputationConfig": {
+      "type": "object",
+      "required": [
+        "bucket",
+        "calculationType",
+        "computationType",
+        "created_by",
+        "name",
+        "organization_id"
+      ],
+      "properties": {
+        "bucket": {
+          "description": "Bucket for the computation",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.Bucket"
+            }
+          ]
+        },
+        "calculationType": {
+          "description": "CalculationType type",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.CalculationType"
+            }
+          ]
+        },
+        "computationErrorLog": {
+          "description": "Error log for the computation, used for compatibility",
+          "type": "string"
+        },
+        "computationType": {
+          "description": "Source computation type",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.ComputationType"
+            }
+          ]
+        },
+        "created_at": {
+          "type": "string"
+        },
+        "created_by": {
+          "description": "User ID of the owner",
+          "type": "string"
+        },
+        "durationSeconds": {
+          "description": "Duration in seconds or -1 (only one measurement)",
+          "type": "integer",
+          "minimum": -1
+        },
+        "enabled": {
+          "description": "Enabled or disabled",
+          "type": "boolean"
+        },
+        "fixedReferenceDate": {
+          "description": "c date of fixed reference point or 0",
+          "type": "string"
+        },
+        "frontEndPresetID": {
+          "description": "Frontend preset ID",
+          "type": "string"
+        },
+        "id": {
+          "description": "Created by the PUT request to organization",
+          "type": "string"
+        },
+        "lastApplied": {
+          "description": "Temp fields",
+          "type": "string"
+        },
+        "modelVersion": {
+          "description": "Version of the model used for the computation, used for compatibility",
+          "type": "string"
+        },
+        "modified_at": {
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the custom computation",
+          "type": "string"
+        },
+        "numComponents": {
+          "description": "Number of components in the computation, used for compatibility",
+          "type": "integer"
+        },
+        "numberOfComputations": {
+          "description": "Current number of computations",
+          "type": "integer"
+        },
+        "offsetSeconds": {
+          "description": "Offset in seconds or -1 (last measurement = -1 offset and -1 duration)",
+          "type": "integer",
+          "minimum": -1
+        },
+        "organization_id": {
+          "description": "Organization ID of the owner",
+          "type": "string"
+        },
+        "referenceDataFilter": {
+          "description": "Filter for reference data, the dates will be generated from the offset and duration if set",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.DataFilter"
+            }
+          ]
+        },
+        "referenceDataInfoList": {
+          "description": "Metadata for the computation snapshot",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.ReferenceDataInfo"
+          }
+        },
+        "referenceDataStd": {
+          "description": "Standard deviation of the reference data, used for compatibility",
+          "type": "number"
+        },
+        "shortname": {
+          "description": "Shortname of the custom computation (for example : \"COMP\")",
+          "type": "string",
+          "maxLength": 5
+        },
+        "targetDataFilter": {
+          "description": "Filter for target data",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.DataFilter"
+            }
+          ]
+        }
+      }
+    },
+    "server.ComputationFilterConfig": {
+      "type": "object",
+      "properties": {
+        "computation_type": {
+          "description": "Field from the JSON Data object (example \"name\")",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.ComputationType"
+          }
+        },
+        "filter_type": {
+          "$ref": "#/definitions/server.FilterType"
+        },
+        "value": {
+          "description": "Is one value or an array of values"
+        }
+      }
+    },
+    "server.ComputationResultDataType": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "x-enum-comments": {
+        "ComputationResultDataTypeBytes": "Data like FCS or image or file",
+        "ComputationResultDataTypeCountInt": "It should be with units [/ml] (tcc, icc, and differences)",
+        "ComputationResultDataTypePercentFloat": "Usually units as percentage (hnap etc)",
+        "ComputationResultDataTypeResultFloat": "Result as float (for example for cosine dissimilarity or division or log reduction)",
+        "ComputationResultDataTypeVectorFloat": "Vector of float64 (like embedding results)"
+      },
+      "x-enum-varnames": [
+        "ComputationResultDataTypeUnknown",
+        "ComputationResultDataTypeCountInt",
+        "ComputationResultDataTypePercentFloat",
+        "ComputationResultDataTypeVectorFloat",
+        "ComputationResultDataTypeBytes",
+        "ComputationResultDataTypeResultFloat"
+      ]
+    },
+    "server.ComputationType": {
+      "type": "object",
+      "properties": {
+        "configID": {
+          "description": "If it's a custom computation, this is the ID of the config",
+          "type": "string"
+        },
+        "data_type": {
+          "$ref": "#/definitions/server.ComputationResultDataType"
+        },
+        "type": {
+          "$ref": "#/definitions/server.MetricType"
+        }
+      }
+    },
+    "server.CurrentMeasurement": {
+      "type": "object",
+      "properties": {
+        "finished": {
+          "description": "Is the measurement finished",
+          "type": "boolean"
+        },
+        "isMeasurement": {
+          "description": "Is the device currently measuring or is it doing other processing works like Updating or Exporting.",
+          "type": "boolean"
+        },
+        "measurement_estimated_end": {
+          "description": "Estimated end date of the measurement",
+          "type": "string",
+          "example": "2024-01-15T10:35:00Z"
+        },
+        "measurement_start_date": {
+          "description": "Start date of the measurement",
+          "type": "string",
+          "example": "2024-01-15T10:26:57Z"
+        },
+        "name": {
+          "description": "Name of the measurement example: Water Analysis",
+          "type": "string",
+          "example": "Water Analysis"
+        },
+        "progress": {
+          "description": "Progress of current protocol. Between 0 and 1",
+          "type": "number",
+          "example": 0.75
+        },
+        "protocol": {
+          "description": "Name of the protocol example: analysis_water",
+          "type": "string",
+          "example": "analysis_water"
+        }
+      }
+    },
+    "server.DOCallConfiguration": {
+      "type": "object",
+      "properties": {
+        "bitmaskAlarm": {
+          "type": "integer",
+          "example": 5
+        },
+        "bitmaskNormal": {
+          "type": "integer",
+          "example": 0
+        },
+        "deviceID": {
+          "type": "string",
+          "example": "507f1f77bcf86cd799439011"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "server.Data": {
+      "type": "object",
+      "properties": {
+        "abrupt_shutdown": {
+          "description": "Value of the abrupt shutdown of the power log",
+          "type": "boolean"
+        },
+        "alarms": {
+          "description": "Value of the alarms of the data",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.Alarm"
+          }
+        },
+        "autosamplerSerial": {
+          "description": "Value of the autosampler serial of the data",
+          "type": "string",
+          "example": "554"
+        },
+        "autosamplerTemperatureTarget": {
+          "description": "Value of the autosampler temperature target of the data",
+          "type": "number",
+          "example": 4
+        },
+        "batchID": {
+          "description": "Value of the batch ID of the data (timestamp)",
+          "type": "string",
+          "example": "BATCH-2024-001"
+        },
+        "batchName": {
+          "description": "Value of the batch name of the data",
+          "type": "string",
+          "example": "Weekly Water Quality Test"
+        },
+        "bucket": {
+          "description": "Value of the bucket where the data is stored",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.Bucket"
+            }
+          ],
+          "example": "auto"
+        },
+        "clean": {
+          "description": "Value of the clean of the power log",
+          "type": "boolean"
+        },
+        "cloudAlarms": {
+          "description": "Cloud alarms associated with this data",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.CloudAlarm"
+          }
+        },
+        "code": {
+          "description": "Value of the code of the error (EXX)",
+          "type": "integer",
+          "example": 2
+        },
+        "comment": {
+          "description": "Value of the comment of the intervention",
+          "type": "string",
+          "example": "Routine maintenance completed successfully"
+        },
+        "computations": {
+          "description": "Related computations from $lookup",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.Computation"
+          }
+        },
+        "count": {
+          "description": "Value of the count of the error",
+          "type": "integer",
+          "example": 3
+        },
+        "created_at": {
+          "description": "Value of when the data was inserted into the database",
+          "type": "string"
+        },
+        "description": {
+          "description": "Description of the data (freely editable)",
+          "type": "string",
+          "maxLength": 500,
+          "example": "Routine water quality analysis of lab sample #001"
+        },
+        "deviceID": {
+          "description": "Value of the ID of the device",
+          "type": "string",
+          "example": "507f1f77bcf86cd799439011"
+        },
+        "error": {
+          "description": "Value of the error of the log",
+          "type": "string",
+          "example": "Connection timeout to external sensor"
+        },
+        "event": {
+          "description": "Power log only",
+          "type": "string",
+          "example": "power_on"
+        },
+        "files": {
+          "description": "Value of the files associated with the data",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "fillSerial": {
+          "description": "Value of the fill serial of the data",
+          "type": "string",
+          "example": "BNO-189284"
+        },
+        "flowAverage": {
+          "description": "Average flow of the stream",
+          "type": "number",
+          "example": 250
+        },
+        "gate": {
+          "description": "Value of the gate used to collect the data",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.GateSetDefinition"
+            }
+          ]
+        },
+        "gateSet": {
+          "description": "Value of the gate set used to collect the data",
+          "type": "string",
+          "example": "tcc_default"
+        },
+        "id": {
+          "description": "Common for all data",
+          "type": "string"
+        },
+        "measurementId": {
+          "description": "Value of the measurement ID of the error (timestamp)",
+          "type": "integer"
+        },
+        "metadata": {
+          "description": "Value of the metadata of the error",
+          "type": "string"
+        },
+        "mixerChanged": {
+          "description": "Value of the mixer changed of the intervention",
+          "type": "boolean"
+        },
+        "mixerMotions": {
+          "description": "Value of the mixer motions of the intervention",
+          "type": "integer"
+        },
+        "modified_at": {
+          "description": "Value of when the data was last modified",
+          "type": "string"
+        },
+        "monitoring": {
+          "description": "Value of the monitoring data of the data",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.MonitoringData"
+            }
+          ]
+        },
+        "name": {
+          "description": "Value of the name of the data",
+          "type": "string",
+          "maxLength": 100,
+          "example": "Water Analysis Sample 1"
+        },
+        "operator": {
+          "description": "Intervention only",
+          "type": "string",
+          "example": "DWi"
+        },
+        "plungerChanged": {
+          "description": "Value of the plunger changed of the intervention",
+          "type": "boolean"
+        },
+        "plungerMotions": {
+          "description": "Value of the plunger motions of the intervention",
+          "type": "integer"
+        },
+        "pressureAverage": {
+          "description": "Average pressure of the stream",
+          "type": "number",
+          "example": 1013.25
+        },
+        "protocol": {
+          "description": "Value of the protocol used to collect the data",
+          "type": "string",
+          "example": "analysis_water"
+        },
+        "protocol_interrupted": {
+          "description": "Value of the protocol interrupted of the power log",
+          "type": "boolean"
+        },
+        "realDeviceID": {
+          "description": "Value of the ID of the real device if it's a virtual device",
+          "type": "string",
+          "example": "507f1f77bcf86cd799439011"
+        },
+        "reboot": {
+          "description": "Value of the reboot of the power log",
+          "type": "boolean"
+        },
+        "samplingTimestamp": {
+          "description": "Measurements only",
+          "type": "string",
+          "example": "2024-01-15T10:26:57Z"
+        },
+        "selfCheckResults": {
+          "description": "Selfcheck result",
+          "type": "string"
+        },
+        "sequenceWellPosition": {
+          "description": "Value of the sequence well position of the data",
+          "type": "integer",
+          "example": 1
+        },
+        "severity": {
+          "description": "Errors only",
+          "type": "string",
+          "example": "warning"
+        },
+        "streamId": {
+          "description": "BactoSwitch",
+          "type": "integer",
+          "example": 1
+        },
+        "streamName": {
+          "description": "Name of the stream, e.g. \"Stream 1\" normally duplicate from the measurement name",
+          "type": "string",
+          "example": "Stream 1"
+        },
+        "success": {
+          "description": "Log only",
+          "type": "boolean"
+        },
+        "temperatureWater": {
+          "description": "Temperature of the water in the stream",
+          "type": "number",
+          "example": 22.5
+        },
+        "timestamp": {
+          "description": "Value of when the data was collected",
+          "type": "string",
+          "example": "2024-01-15T10:30:00Z"
+        },
+        "useSosd": {
+          "description": "If true, the data is from a Bactoswitch stream, otherwise it is from a regular measurement",
+          "type": "boolean"
+        },
+        "username": {
+          "description": "Username of the measurement (who made it?)",
+          "type": "string",
+          "example": "john.smith@example.com"
+        },
+        "validRatio": {
+          "description": "Value of the valid ratio of the data",
+          "type": "number",
+          "example": 0.9816
+        },
+        "valveChanged": {
+          "description": "Value of the valve changed of the intervention",
+          "type": "boolean"
+        },
+        "valveMotions": {
+          "description": "Value of the valve motions of the intervention",
+          "type": "integer"
+        },
+        "warnings": {
+          "description": "Value of the warnings of the data",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.Warning"
+          }
+        }
+      }
+    },
+    "server.DataFilter": {
+      "type": "object",
+      "properties": {
+        "buckets": {
+          "description": "if empty, it means all buckets",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.Bucket"
+          }
+        },
+        "computation_filter": {
+          "description": "Filter for computations (only TCC, etc...)",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.ComputationFilterConfig"
+          }
+        },
+        "computation_select": {
+          "description": "Select only certain computations",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.ComputationType"
+          }
+        },
+        "device_ids": {
+          "description": "cannot be empty",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "end_date": {
+          "description": "if zero, it means all dates after StartDate",
+          "type": "string"
+        },
+        "filter_config": {
+          "description": "Filter for the data",
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.DataFilterConfig"
+          }
+        },
+        "last_measurement_per_device": {
+          "description": "If not zero, returns PageSize number of last measurements per device",
+          "type": "boolean"
+        },
+        "page": {
+          "type": "integer"
+        },
+        "page_size": {
+          "type": "integer"
+        },
+        "sort_field": {
+          "description": "Field from the JSON Data object (example \"name\")",
+          "type": "string"
+        },
+        "sort_order": {
+          "description": "asc or desc",
+          "type": "string"
+        },
+        "start_date": {
+          "description": "if zero, it means all dates until EndDate",
+          "type": "string"
+        },
+        "with_cloud_alarms": {
+          "description": "If true, joins cloud alarms to each data entry",
+          "type": "boolean"
+        },
+        "with_computations": {
+          "description": "If true, returns computations along with data",
+          "type": "boolean"
+        }
+      }
+    },
+    "server.DataFilterConfig": {
+      "type": "object",
+      "properties": {
+        "filter_field": {
+          "description": "Field from the JSON Data object (example \"name\")",
+          "type": "string"
+        },
+        "filter_type": {
+          "$ref": "#/definitions/server.FilterType"
+        },
+        "value": {
+          "description": "Is one value or an array of values"
+        }
+      }
+    },
+    "server.DataType": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        100
+      ],
+      "x-enum-varnames": [
+        "DataTypeUnknown",
+        "DataTypeDevice",
+        "DataTypeUser",
+        "DataTypeOrganization",
+        "DataTypeStatus",
+        "DataTypeCommand",
+        "DataTypeRole",
+        "DataTypeData",
+        "DataTypeComputation",
+        "DataTypePackageType",
+        "DataTypeComputationConfig",
+        "DataTypeAlarmConfig",
+        "DataTypeAlarm",
+        "DataTypeLicence",
+        "DataTypeOpenIDConfig",
+        "DataTypeOauthState",
+        "DataTypeFile",
+        "DataTypeDiagnostic",
+        "DataTypeAudit",
+        "DataTypeMigration",
+        "DataTypeTask",
+        "DataTypeError",
+        "DataTypeCloudAlarmConfig",
+        "DataTypeGenericJSON"
+      ]
+    },
+    "server.Device": {
+      "type": "object",
+      "properties": {
+        "address": {
+          "description": "User-defined address",
+          "type": "string",
+          "example": "Ch. Dent d'Oche 1A, 1024 Ecublens, Switzerland"
+        },
+        "alwaysOn": {
+          "description": "Auto restart mode",
+          "type": "boolean"
+        },
+        "autoArgs": {
+          "description": "Settings fields",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.CommandArgs"
+            }
+          ]
+        },
+        "autoInterval": {
+          "description": "how often to run auto mode measurement (in minutes)",
+          "type": "integer",
+          "example": 60
+        },
+        "autoLogout": {
+          "description": "Auto logout in seconds",
+          "type": "integer",
+          "example": 120
+        },
+        "autoModeRestart": {
+          "description": "Auto mode restarts at reboot",
+          "type": "boolean"
+        },
+        "autoRestartCleanup": {
+          "description": "Auto restart cleanup",
+          "type": "boolean"
+        },
+        "buzzerAtCompletion": {
+          "description": "Beeps at protocol completion",
+          "type": "boolean"
+        },
+        "cloudDeleteAfterUpload": {
+          "description": "If true, delete results after upload                                                                                                                                     // Sosd configuration for the stream",
+          "type": "boolean"
+        },
+        "cloudNoUploadResults": {
+          "description": "If true, do not upload results to cloud",
+          "type": "boolean"
+        },
+        "country": {
+          "description": "User-defined country",
+          "type": "string",
+          "example": "Switzerland"
+        },
+        "date_of_registration": {
+          "description": "Set at enrollment",
+          "type": "string"
+        },
+        "description": {
+          "description": "User-defined description, only in database",
+          "type": "string",
+          "example": "Flow cytometry device for water analysis"
+        },
+        "gps_latitude": {
+          "description": "User-defined GPS latitude",
+          "type": "number",
+          "example": 46.5197
+        },
+        "gps_longitude": {
+          "description": "User-defined GPS longitude",
+          "type": "number",
+          "example": 6.6323
+        },
+        "id": {
+          "description": "Database identifier",
+          "type": "string"
+        },
+        "last_config": {
+          "description": "Updated",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.DeviceConfig"
+            }
+          ]
+        },
+        "last_status": {
+          "description": "Added dynamically",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.DeviceStatus"
+            }
+          ]
+        },
+        "modified_at": {
+          "type": "string"
+        },
+        "name": {
+          "description": "Name of the device, updated from Settings",
+          "type": "string",
+          "example": "Lab Device 001"
+        },
+        "ntpServer1": {
+          "description": "NTP server 1 (ip address or hostname)",
+          "type": "string",
+          "example": "0.pool.ntp.org"
+        },
+        "ntpServer2": {
+          "description": "NTP server 2 (ip address or hostname)",
+          "type": "string",
+          "example": "1.pool.ntp.org"
+        },
+        "organization_id": {
+          "description": "Not optional, if not enrolled, then the organization is the master organization",
+          "type": "string",
+          "example": "507f1f77bcf86cd799439011"
+        },
+        "preferred_color": {
+          "description": "User-defined preferred color for the device",
+          "type": "string",
+          "maxLength": 7,
+          "example": "#FF5733"
+        },
+        "pureOptionKey": {
+          "description": "Activation key for pure package",
+          "type": "string",
+          "example": ""
+        },
+        "scientificPackageOptionKey": {
+          "description": "Activation key for scientific package",
+          "type": "string",
+          "example": "abc123xyz"
+        },
+        "screensaverInterval": {
+          "description": "Screensaver interval in seconds",
+          "type": "integer",
+          "example": 30
+        },
+        "serial_number": {
+          "description": "Serial number of the device as string (can be set as DEMO1 for example)",
+          "type": "string",
+          "example": "SN12345678"
+        },
+        "serviceContactInfo": {
+          "description": "Service contact information",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "example": [
+            "[\"bNovate Technologies SA\"",
+            "\"Ch. Dent d'Oche 1A\"",
+            "\"1024 Ecublens",
+            " Switzerland\"",
+            "\"support@bnovate.com\"",
+            "\"+41 21 552 14 21\"]"
+          ]
+        },
+        "service_notes": {
+          "description": "Notes only for service",
+          "type": "string",
+          "example": "Changed optical module"
+        },
+        "sosdConfiguration": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.SosdConfigDefinition"
+          }
+        },
+        "sosdEnabled": {
+          "description": "SOSD enabled flag",
+          "type": "boolean"
+        },
+        "userManagementOptionKey": {
+          "description": "Activation key for user management package",
+          "type": "string",
+          "example": "3394a1"
+        },
+        "virtual": {
+          "description": "Virtual device fields (not stored in database, computed dynamically)",
+          "type": "boolean"
+        },
+        "virtualDeviceInfo": {
+          "description": "Virtual device metadata",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.VirtualDeviceInfo"
+            }
+          ]
+        },
+        "virtualLinkedIDs": {
+          "description": "List of linked virtual devices",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "server.DeviceCommand": {
+      "type": "object",
+      "required": [
+        "command",
+        "device_id"
+      ],
+      "properties": {
+        "_id": {
+          "type": "string"
+        },
+        "acknowledged_at": {
+          "type": "string",
+          "example": "2024-01-15T10:31:15Z"
+        },
+        "command": {
+          "enum": [
+            10,
+            20,
+            21,
+            30,
+            31,
+            32,
+            33,
+            40,
+            41,
+            42,
+            43
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.CommandType"
+            }
+          ],
+          "example": 30
+        },
+        "created_at": {
+          "description": "UserUUID                  uuid.UUID                 `bson:\"userUUID,omitempty\" json:\"userUUID,omitempty\"`",
+          "type": "string",
+          "example": "2024-01-15T10:30:00Z"
+        },
+        "device_id": {
+          "description": "The device that will execute the command",
+          "type": "string",
+          "example": "507f1f77bcf86cd799439011"
+        },
+        "message": {
+          "type": "string",
+          "example": "Command executed successfully"
+        },
+        "modified_at": {
+          "type": "string",
+          "example": "2024-01-15T10:31:15Z"
+        },
+        "protocolParameters": {
+          "description": "Used for command StartProtocol",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.CommandProtocolParameters"
+            }
+          ]
+        },
+        "settingsParameters": {
+          "description": "Used for command SetSettings",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.CommandParameters"
+            }
+          ]
+        },
+        "status": {
+          "enum": [
+            1,
+            2,
+            3,
+            4,
+            5,
+            6
+          ],
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.CommandStatus"
+            }
+          ],
+          "example": 1
+        },
+        "userId": {
+          "description": "The user that created the command",
+          "type": "string",
+          "example": "507f1f77bcf86cd799439012"
+        },
+        "username": {
+          "type": "string",
+          "example": "john.smith@example.com"
+        }
+      }
+    },
+    "server.DeviceConfig": {
+      "type": "object",
+      "properties": {
+        "config": {
+          "description": "Config data = not user-definable",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "modified_at": {
+          "type": "string"
+        },
+        "settings": {
+          "description": "Settings data = user-definable",
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "server.DeviceState": {
+      "type": "integer",
+      "enum": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16,
+        17,
+        18,
+        19,
+        20,
+        21,
+        22,
+        98,
+        99
+      ],
+      "x-enum-comments": {
+        "STATUS_ABORTED": "Aborted (same as Idle)",
+        "STATUS_ANALYZING": "Analyzing state",
+        "STATUS_CLEANING": "Cleaning state",
+        "STATUS_DELETING": "Deleting data",
+        "STATUS_EJECTING": "Eject USB",
+        "STATUS_ERROR": "Error state",
+        "STATUS_EXPORTING": "Exporting data",
+        "STATUS_FILLING": "Filling state",
+        "STATUS_FLUSHING": "Flushing state",
+        "STATUS_HEATING": "Heating state",
+        "STATUS_IDLE": "Idle state",
+        "STATUS_INCUBATING": "Incubating state",
+        "STATUS_INITIALIZING": "Initializing state",
+        "STATUS_MIXING": "Mixing state",
+        "STATUS_MOVING": "Move autosampler",
+        "STATUS_PRIMING": "Priming state - use sampling device",
+        "STATUS_PROCESSING": "Processing state",
+        "STATUS_RENAMING": "Renaming data",
+        "STATUS_SAVING": "Saving data",
+        "STATUS_SELFCHECK": "Self-check",
+        "STATUS_SEPARATING": "Separating (for legiosense)",
+        "STATUS_UNKNOWN": "Unknown state",
+        "STATUS_UPDATING": "Updating (either OTA or USB), V3 only",
+        "STATUS_UPLOADING": "Uploading data",
+        "STATUS_VALIDATING": "Protocol validatio state (for bactosense Multi)"
+      },
+      "x-enum-varnames": [
+        "STATUS_IDLE",
+        "STATUS_INITIALIZING",
+        "STATUS_HEATING",
+        "STATUS_FILLING",
+        "STATUS_PRIMING",
+        "STATUS_MIXING",
+        "STATUS_INCUBATING",
+        "STATUS_ANALYZING",
+        "STATUS_CLEANING",
+        "STATUS_FLUSHING",
+        "STATUS_PROCESSING",
+        "STATUS_VALIDATING",
+        "STATUS_MOVING",
+        "STATUS_EJECTING",
+        "STATUS_EXPORTING",
+        "STATUS_RENAMING",
+        "STATUS_DELETING",
+        "STATUS_SAVING",
+        "STATUS_SELFCHECK",
+        "STATUS_ABORTED",
+        "STATUS_UPDATING",
+        "STATUS_UPLOADING",
+        "STATUS_SEPARATING",
+        "STATUS_UNKNOWN",
+        "STATUS_ERROR"
+      ]
+    },
+    "server.DeviceStatus": {
+      "type": "object",
+      "properties": {
+        "autoMode": {
+          "description": "Auto mode status",
+          "type": "boolean"
+        },
+        "cartridge_status": {
+          "description": "Cartridge status",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.CartridgeStatus"
+            }
+          ]
+        },
+        "created_at": {
+          "description": "Timestamp of the message received by the server",
+          "type": "string",
+          "example": "2024-01-15T10:30:00Z"
+        },
+        "current_measurement": {
+          "description": "Current protocol",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.CurrentMeasurement"
+            }
+          ]
+        },
+        "current_state": {
+          "description": "Current state of the device as an enum",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.DeviceState"
+            }
+          ]
+        },
+        "default_metric": {
+          "description": "Default metric for the device",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.ComputationType"
+            }
+          ]
+        },
+        "device_id": {
+          "description": "ID of the device",
+          "type": "string",
+          "example": "507f1f77bcf86cd799439011"
+        },
+        "gui_mode": {
+          "description": "GUI mode",
+          "type": "string",
+          "example": "auto"
+        },
+        "id": {
+          "type": "string"
+        },
+        "ip_address": {
+          "description": "Public IP address of the device",
+          "type": "string",
+          "example": "192.168.1.100"
+        },
+        "last_error": {
+          "description": "Last error message",
+          "type": "string",
+          "example": "CartridgeNotFound"
+        },
+        "last_error_severity": {
+          "description": "Last error severity",
+          "type": "string",
+          "example": "warning"
+        },
+        "next_auto_measurement": {
+          "description": "Timestamp of the next auto measurement",
+          "type": "string",
+          "example": "2024-01-15T11:30:00Z"
+        },
+        "plcMode": {
+          "description": "PLC mode status",
+          "type": "boolean"
+        },
+        "protocolsInLastPeriod": {
+          "description": "Number of protocols in the last period",
+          "type": "integer",
+          "example": 12
+        },
+        "service_status": {
+          "description": "Service status",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.ServiceStatus"
+            }
+          ]
+        },
+        "sosd_status": {
+          "description": "SOSD status",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.SosdStatus"
+            }
+          ]
+        },
+        "status": {
+          "description": "Raw status data from the device, not saved in database",
+          "type": "object",
+          "additionalProperties": true
+        },
+        "system_status": {
+          "description": "System status",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.SystemStatus"
+            }
+          ]
+        },
+        "timestamp": {
+          "description": "Timestamp of the status update",
+          "type": "string",
+          "example": "2024-01-15T10:30:00Z"
+        }
+      }
+    },
+    "server.ErrorCode": {
+      "type": "integer",
+      "enum": [
+        0,
+        1000,
+        1010,
+        1020,
+        1030,
+        1040,
+        1050,
+        1060,
+        1070,
+        1100,
+        1110,
+        1120,
+        1130,
+        1140,
+        1150,
+        1160,
+        1170,
+        1175,
+        1176,
+        1177,
+        1180,
+        1181,
+        1182,
+        1183,
+        1200,
+        1210,
+        1220,
+        1230,
+        1240,
+        1241,
+        1300,
+        1310,
+        1320,
+        1330,
+        1340,
+        1350,
+        1360,
+        1370,
+        1400,
+        1410,
+        2000,
+        2010,
+        2020,
+        2030,
+        2040,
+        2050,
+        2060,
+        2070,
+        2080,
+        2090,
+        2100,
+        3000,
+        3010,
+        3020,
+        3030,
+        3040,
+        3050,
+        3051,
+        3060,
+        3070,
+        3075,
+        3080,
+        3090,
+        3100,
+        3200,
+        3201,
+        3202,
+        3203,
+        4000,
+        4010,
+        4020,
+        4030,
+        4040,
+        4050,
+        8010,
+        8020,
+        8030,
+        8040,
+        9000,
+        9010,
+        9404
+      ],
+      "x-enum-comments": {
+        "NotFound": "NotFound is used for HTTP 404 errors",
+        "OrganizationDemoOrganization": "Organization is a demo organization",
+        "OrganizationEnrollSecretsLimitExceeded": "Organization has reached maximum number of enroll secrets",
+        "OrganizationPendingInvitesLimitExceeded": "Organization has reached maximum number of pending invitations",
+        "OrganizationUserLimitExceeded": "Organization has reached maximum number of users",
+        "UserDoesNotExist": "User does not exist",
+        "UserOrganizationLimitExceeded": "User has reached maximum number of organizations"
+      },
+      "x-enum-varnames": [
+        "UnknownError",
+        "UserDoesNotExist",
+        "UserAlreadyExists",
+        "UserUnauthorized",
+        "UserIDInvalid",
+        "UserVerificationCodeInvalid",
+        "UserAlreadyInOrganization",
+        "UserEmailOnlyOpenID",
+        "UserOrganizationLimitExceeded",
+        "OrganizationDoesNotExist",
+        "OrganizationAlreadyExists",
+        "OrganizationUnauthorized",
+        "OrganizationIDInvalid",
+        "OrganizationUniqueAdmin",
+        "OrganizationNotEmpty",
+        "OrganizationUserLimitExceeded",
+        "OrganizationEmailNotAllowed",
+        "OrganizationPendingInvitesLimitExceeded",
+        "OrganizationEnrollSecretsLimitExceeded",
+        "OrganizationDemoOrganization",
+        "OauthError",
+        "OauthClaimsError",
+        "OauthTokenExchangeError",
+        "OauthNoPasswordConnectionPossible",
+        "MissingToken",
+        "InvalidToken",
+        "InvalidAPIKey",
+        "InvalidRequest",
+        "InvalidJson",
+        "InvalidId",
+        "DeviceIDInvalid",
+        "DeviceNotFound",
+        "RoleIDInvalid",
+        "DeviceActivationCodeInvalid",
+        "RateLimitExceeded",
+        "CaptchaGenerationError",
+        "CaptchaWrongAnswer",
+        "DeviceIsADemo",
+        "CommandNotFound",
+        "CommandStatusInvalid",
+        "InvalidUsernameOrPassword",
+        "InvalidEmail",
+        "PasswordTooWeak",
+        "UserError",
+        "TOTPMissing",
+        "TOTPInvalid",
+        "JWTTokenGenerationError",
+        "JWTTokenValidationError",
+        "WantsPasswordError",
+        "PasswordExpired",
+        "AccountBlocked",
+        "DatabaseUserError",
+        "DatabaseRoleError",
+        "DatabaseCommandError",
+        "DatabasePermissionError",
+        "DatabaseDeviceError",
+        "DatabaseDataError",
+        "DatabaseDataNotFound",
+        "DatabaseStatusError",
+        "DatabaseOrganizationError",
+        "DatabaseOpenIDError",
+        "DatabaseComputationError",
+        "DatabaseLicenceError",
+        "DatabaseTaskError",
+        "DeviceCopyError",
+        "DeviceCopySourceNotFound",
+        "DeviceCopyTargetNotFound",
+        "DeviceCopyTaskScheduleError",
+        "LicenceCreationError",
+        "LicenceApplyError",
+        "LicenceError",
+        "LicenceNotFound",
+        "LicenceExpired",
+        "LicenceNoLicenceToExtend",
+        "RabbitConnectionError",
+        "RabbitProducerError",
+        "RabbitConsumerError",
+        "RabbitMessageError",
+        "EmailTemplateError",
+        "EmailSendError",
+        "NotFound"
+      ]
+    },
+    "server.ErrorResponse": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "description": "Error message (e.g. \"User does not exists.\")",
+          "type": "string"
+        },
+        "errorCode": {
+          "description": "Standard error code",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.ErrorCode"
+            }
+          ]
+        },
+        "errorMessage": {
+          "description": "Standard error message",
+          "type": "string"
+        }
+      }
+    },
+    "server.ExportConfig": {
+      "type": "object",
+      "properties": {
+        "filters": {
+          "description": "Data filter",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.DataFilter"
+            }
+          ]
+        },
+        "metadata": {
+          "description": "Metadata (not sent by the client)",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.ExportMetadata"
+            }
+          ]
+        },
+        "organization_id": {
+          "description": "The ID of the organization who created the export",
+          "type": "string"
+        },
+        "type": {
+          "$ref": "#/definitions/server.ExportType"
+        },
+        "user_id": {
+          "description": "The ID of the user who created the export",
+          "type": "string"
+        }
+      }
+    },
+    "server.ExportMetadata": {
+      "type": "object",
+      "properties": {
+        "exported_at": {
+          "type": "string"
+        },
+        "list_devices": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "locale": {
+          "type": "string"
+        },
+        "mode": {
+          "type": "string"
+        },
+        "num_results": {
+          "type": "integer"
+        },
+        "username": {
+          "type": "string"
+        }
+      }
+    },
+    "server.ExportType": {
+      "type": "integer",
+      "enum": [
+        0,
+        10,
+        20,
+        30,
+        40
+      ],
+      "x-enum-varnames": [
+        "UnknownExportType",
+        "ExportTypeCSV",
+        "ExportTypeJSON",
+        "ExportTypeXLSX",
+        "ExportTypePDF"
+      ]
+    },
+    "server.FCSData": {
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "metadata": {
+          "$ref": "#/definitions/server.FCSMetadata"
+        }
+      }
+    },
+    "server.FCSMetadata": {
+      "type": "object",
+      "properties": {
+        "beginAnalysis": {
+          "description": "Byte-offset to the beginning of the ANALYSIS segment.",
+          "type": "integer"
+        },
+        "beginData": {
+          "description": "Byte-offset to the beginning of the DATA segment.",
+          "type": "integer"
+        },
+        "beginSupplementalText": {
+          "description": "Required parameters (FCS 3.1. Section 3.2.18)",
+          "type": "integer"
+        },
+        "beginTime": {
+          "description": "Clock time at beginning of data acquisition.",
+          "type": "string"
+        },
+        "byteOrder": {
+          "description": "Byte order for data acquisition computer.",
+          "type": "string"
+        },
+        "comment": {
+          "description": "Comment.",
+          "type": "string"
+        },
+        "computerSystem": {
+          "description": "Type of computer and its operating system.",
+          "type": "string"
+        },
+        "cytometerSN": {
+          "description": "Flow cytometer serial number. LSRII(CYTNUM)",
+          "type": "string"
+        },
+        "cytometerType": {
+          "description": "Type of flow cytometer.",
+          "type": "string"
+        },
+        "dataType": {
+          "description": "Type of data in DATA segment (ASCII, integer, floating point).",
+          "type": "string"
+        },
+        "date": {
+          "description": "Date of data set acquisition.",
+          "type": "string"
+        },
+        "endAnalysis": {
+          "description": "Byte-offset to the last byte of the ANALYSIS segment.",
+          "type": "integer"
+        },
+        "endData": {
+          "description": "Byte-offset to the last byte of the DATA segment.",
+          "type": "integer"
+        },
+        "endSupplementalText": {
+          "description": "Byte-offset to the last byte of a supplemental TEXT segment.",
+          "type": "integer"
+        },
+        "endTime": {
+          "description": "Clock time at end of data acquisition.",
+          "type": "string"
+        },
+        "experimentID": {
+          "description": "Stratedigm",
+          "type": "string"
+        },
+        "experimentInitiator": {
+          "description": "The name of the person initiating the experiment.",
+          "type": "string"
+        },
+        "experimentName": {
+          "description": "Stratedigm(EXPERIMENT_NAME), LSRII(EXPERIMENT NAME)",
+          "type": "string"
+        },
+        "fcsVersion": {
+          "type": "string"
+        },
+        "fileName": {
+          "description": "(Some) Optional parameters (FCS 3.1. Section 3.2.19)",
+          "type": "string"
+        },
+        "flowRate": {
+          "description": "Attune",
+          "type": "number"
+        },
+        "institution": {
+          "description": "Institution at which data was acquired.",
+          "type": "string"
+        },
+        "mode": {
+          "description": "Data mode (list mode - preferred, histogram - deprecated).",
+          "type": "string"
+        },
+        "nextData": {
+          "description": "Byte offset to next data set in the file.",
+          "type": "integer"
+        },
+        "numAbortedEvent": {
+          "description": "Events lost due to data acquisition electronic coincidence.",
+          "type": "integer"
+        },
+        "numEvents": {
+          "description": "Total number of events in the data set.",
+          "type": "integer"
+        },
+        "numLostEvent": {
+          "description": "Number of events lost due to computer busy.",
+          "type": "integer"
+        },
+        "numParameters": {
+          "description": "Number of parameters in an event.",
+          "type": "integer"
+        },
+        "operator": {
+          "description": "Name of flow cytometry operator.",
+          "type": "string"
+        },
+        "originality": {
+          "description": "Information whether the FCS data set has been modified (any part of it) or is original as acquired by the instrument.",
+          "type": "string"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/server.FCSParameter"
+          }
+        },
+        "plateID": {
+          "description": "Plate identifier. Stratedigm(PLATE_ID, not globally unique). LSRII(PLATE ID)",
+          "type": "string"
+        },
+        "plateName": {
+          "description": "Plate name. LSRII(PLATE NAME). Stratedigm(SAMPLE_NAME)",
+          "type": "string"
+        },
+        "software": {
+          "description": "Non-standard parameters",
+          "type": "string"
+        },
+        "specimenLabel": {
+          "description": "Specimen (e.g., tube) label.",
+          "type": "string"
+        },
+        "specimenSource": {
+          "description": "Source of the specimen (patient name, cell types)",
+          "type": "string"
+        },
+        "specimenType": {
+          "description": "Type of cells or other objects measured.",
+          "type": "string"
+        },
+        "timeStep": {
+          "description": "Time step for time parameter.",
+          "type": "number"
+        },
+        "tubeName": {
+          "description": "Stratedigm(TUBE_NAME), LSRII(TUBE NAME)",
+          "type": "string"
+        },
+        "volume": {
+          "description": "Volume of sample run during data acquisition (in nanoliters).",
+          "type": "number"
+        },
+        "wellID": {
+          "description": "Well identifier (e.g. A07). LSRII(WELL ID) Stratedigm(WELL_ID)",
+          "type": "string"
+        }
+      }
+    },
+    "server.FCSParameter": {
+      "type": "object",
+      "properties": {
+        "amplificationType": {
+          "description": "Amplification type for parameter n.",
+          "type": "array",
+          "items": {
+            "type": "number"
+          }
+        },
+        "amplifierGain": {
+          "description": "Amplifier gain used for acquisition of parameter n.",
+          "type": "number"
+        },
+        "bitLength": {
+          "description": "Required",
+          "type": "integer"
+        },
+        "detectorName": {
+          "description": "Non-standard parameters",
+          "type": "string"
+        },
+        "detectorType": {
+          "description": "Detector type for parameter n.",
+          "type": "string"
+        },
+        "detectorVoltage": {
+          "description": "Detector voltage for parameter n.",
+          "type": "number"
+        },
+        "high": {
+          "description": "Stratedigm",
+          "type": "number"
+        },
+        "low": {
+          "description": "Stratedigm",
+          "type": "number"
+        },
+        "name": {
+          "description": "Optional",
+          "type": "string"
+        },
+        "opticalFilter": {
+          "description": "Name of optical filter for parameter n.",
+          "type": "string"
+        },
+        "parameterID": {
+          "type": "integer"
+        },
+        "range": {
+          "description": "Range for parameter number n.",
+          "type": "integer"
+        },
+        "shortName": {
+          "description": "Short name for parameter n.",
+          "type": "string"
+        }
+      }
+    },
+    "server.FilterType": {
+      "type": "string",
+      "enum": [
+        "in",
+        "eq",
+        "gt",
+        "gte",
+        "lte",
+        "lt",
+        "contains",
+        "regex",
+        "exists"
+      ],
+      "x-enum-comments": {
+        "FilterTypeContains": "Only works for values of type string. Escapes [] () etc..."
+      },
+      "x-enum-varnames": [
+        "FilterTypeIn",
+        "FilterTypeEq",
+        "FilterTypeGt",
+        "FilterTypeGte",
+        "FilterTypeLte",
+        "FilterTypeLt",
+        "FilterTypeContains",
+        "FilterTypeRegex",
+        "FilterTypeExists"
+      ]
+    },
+    "server.GateDefinition": {
+      "type": "object",
+      "properties": {
+        "channel": {
+          "description": "Used for linear gates",
+          "type": "string"
+        },
+        "channels": {
+          "description": "Used for polygonal gates",
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "limit": {
+          "description": "Used for linear gates",
+          "type": "number"
+        },
+        "points": {
+          "description": "Used for polygonal gates",
+          "type": "array",
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          }
+        },
+        "type": {
+          "description": "Polygon vs linear",
+          "type": "string"
+        }
+      }
+    },
+    "server.GateSetDefinition": {
+      "type": "object",
+      "properties": {
+        "gates": {
+          "description": "Map of gates",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/server.GateDefinition"
+          }
+        },
+        "name": {
+          "description": "Long name (display name)",
+          "type": "string"
+        },
+        "type": {
+          "description": "LDC vs TCC",
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.GateSetType"
+            }
+          ]
+        },
+        "typeName": {
+          "description": "TCC (double gating)",
+          "type": "string"
+        }
+      }
+    },
+    "server.GateSetType": {
+      "type": "string",
+      "enum": [
+        "UVC",
+        "TCC",
+        "ICC",
+        "ACC",
+        "FIT"
+      ],
+      "x-enum-varnames": [
+        "GateSetNameUVC",
+        "GateSetNameTCC",
+        "GateSetNameICC",
+        "GateSetNameACC",
+        "GateSetNameFIT"
+      ]
+    },
+    "server.MessageConfiguration": {
+      "type": "object",
+      "properties": {
+        "customAddresses": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "example": [
+            "[\"alert1@example.com\"",
+            "\"alert2@example.com\"]"
+          ]
+        },
+        "customAlert": {
+          "type": "boolean"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "organizationAlert": {
+          "type": "boolean"
+        }
+      }
+    },
+    "server.MetricType": {
+      "type": "string",
+      "enum": [
+        "Unknown",
+        "TCC",
+        "ICC",
+        "ACC",
+        "HNAC",
+        "HACC",
+        "HNAP",
+        "HACP",
+        "LNAC",
+        "LACC",
+        "GATEPLUS",
+        "Calculation",
+        "Embedding",
+        "EmbeddingHNA",
+        "BactoScoreComponents"
+      ],
+      "x-enum-comments": {
+        "MetricTypeBactoScoreComponents": "Singular values from SVD of the embedding matrix"
+      },
+      "x-enum-varnames": [
+        "MetricTypeUnknown",
+        "MetricTypeTCC",
+        "MetricTypeICC",
+        "MetricTypeACC",
+        "MetricTypeHNAC",
+        "MetricTypeHACC",
+        "MetricTypeHNAP",
+        "MetricTypeHACP",
+        "MetricTypeLNAC",
+        "MetricTypeLACC",
+        "MetricTypeGATEPLUS",
+        "MetricTypeCalculation",
+        "MetricTypeEmbedding",
+        "MetricTypeEmbeddingHNA",
+        "MetricTypeBactoScoreComponents"
+      ]
+    },
+    "server.MonitoringData": {
+      "type": "object",
+      "properties": {
+        "error": {
+          "type": "string"
+        },
+        "fl1": {
+          "$ref": "#/definitions/server.BeadsFitDetail"
+        },
+        "fl2": {
+          "$ref": "#/definitions/server.BeadsFitDetail"
+        },
+        "ssc": {
+          "$ref": "#/definitions/server.BeadsFitDetail"
+        },
+        "type": {
+          "type": "string"
+        }
+      }
+    },
+    "server.PushAPIConfiguration": {
+      "type": "object",
+      "properties": {
+        "customHeaders": {
+          "description": "Custom HTTP headers",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "token": {
+          "type": "string",
+          "example": "abc123token456"
+        },
+        "url": {
+          "type": "string",
+          "example": "https://api.example.com/webhook"
+        }
+      }
+    },
+    "server.ReferenceDataInfo": {
+      "type": "object",
+      "properties": {
+        "dataID": {
+          "description": "Data ID of the reference",
+          "type": "string"
+        },
+        "timestamp": {
+          "description": "Timestamp of the reference data",
+          "type": "string"
+        }
+      }
+    },
+    "server.ServiceStatus": {
+      "type": "object",
+      "properties": {
+        "diskMeasurementsRemaining": {
+          "description": "Number of measurements remaining on the disk (estimated at 3MB/measurement)",
+          "type": "integer",
+          "example": 2840
+        },
+        "humidity": {
+          "description": "Humidity in the device (%)",
+          "type": "number",
+          "example": 42.5
+        },
+        "laserLife": {
+          "description": "Lifetime of the laser from 0 to 100",
+          "type": "number",
+          "example": 87.3
+        },
+        "laserSerial": {
+          "description": "Serial number of the laser",
+          "type": "string",
+          "example": "LSR-456789"
+        },
+        "laserVersion": {
+          "description": "Version of the laser",
+          "type": "string",
+          "example": "2.1.0"
+        },
+        "mixerMotions": {
+          "description": "Number of motions of the mixer",
+          "type": "integer",
+          "example": 12834
+        },
+        "nextServiceDueDate": {
+          "description": "Date of the next service",
+          "type": "string",
+          "example": "2024-07-15T00:00:00Z"
+        },
+        "pcbSerial": {
+          "description": "Serial number of the CPU mainboard",
+          "type": "string",
+          "example": "PCB-20240115-001"
+        },
+        "pcbVersion": {
+          "description": "Version of the CPU mainboard",
+          "type": "string",
+          "example": "v3.2"
+        },
+        "plungerLifetime": {
+          "description": "Lifetime of the plunger (max motions)",
+          "type": "integer",
+          "example": 50000
+        },
+        "plungerMotions": {
+          "description": "Number of motions of the plunger",
+          "type": "integer",
+          "example": 8934
+        },
+        "pumpMotions": {
+          "description": "Number of motions of the pump",
+          "type": "integer",
+          "example": 5672
+        },
+        "rapidHeat": {
+          "description": "Is the rapid heat enabled",
+          "type": "boolean"
+        },
+        "temperature": {
+          "description": "Temperature in the device (\u00b0C)",
+          "type": "number",
+          "example": 23.7
+        },
+        "ufmSerial": {
+          "description": "Serial number of the UFM",
+          "type": "string",
+          "example": "UFM-SN-789123"
+        },
+        "ufmVersion": {
+          "description": "Version of the UFM",
+          "type": "string",
+          "example": "1.4.2"
+        },
+        "valveLifetime": {
+          "description": "Lifetime of the valve (max motions)",
+          "type": "integer",
+          "example": 100000
+        },
+        "valveMotions": {
+          "description": "Number of motions of the valve",
+          "type": "integer",
+          "example": 15423
+        },
+        "winterModeExpiryDate": {
+          "description": "Expiry date of the winter mode in seconds since epoch",
+          "type": "string",
+          "example": "2024-03-20T23:59:59Z"
+        }
+      }
+    },
+    "server.SosdConfigDefinition": {
+      "type": "object",
+      "properties": {
+        "color": {
+          "description": "Color of the stream",
+          "type": "string"
+        },
+        "enabled": {
+          "description": "If True, enable this stream",
+          "type": "boolean"
+        },
+        "streamId": {
+          "type": "integer"
+        },
+        "streamName": {
+          "type": "string"
+        }
+      }
+    },
+    "server.SosdStatus": {
+      "type": "object",
+      "properties": {
+        "nextStreamIndex": {
+          "description": "Next stream index to be used",
+          "type": "integer",
+          "example": 2
+        },
+        "sosdSerial": {
+          "description": "SOSD serial number",
+          "type": "string",
+          "example": "SOSD-12345"
+        },
+        "sosdVersion": {
+          "description": "SOSD version",
+          "type": "string",
+          "example": "1.2.3"
+        },
+        "sosd_connected": {
+          "description": "SOSD connected status",
+          "type": "boolean"
+        },
+        "sosd_measure_flow_mlpermin": {
+          "description": "Flow in ml/min",
+          "type": "number",
+          "example": 250
+        },
+        "sosd_measure_humidity_ext_percentrh": {
+          "description": "External humidity in %",
+          "type": "number",
+          "example": 65.5
+        },
+        "sosd_measure_humidity_int_percentrh": {
+          "description": "Internal humidity in %",
+          "type": "number",
+          "example": 45.2
+        },
+        "sosd_measure_temperature_ext_deg": {
+          "description": "External temperature in \u00b0C",
+          "type": "number",
+          "example": 22.3
+        },
+        "sosd_measure_temperature_int_deg": {
+          "description": "Internal temperature in \u00b0C",
+          "type": "number",
+          "example": 25.1
+        },
+        "sosd_setup_mounted_valve_count": {
+          "description": "Number of mounted valves",
+          "type": "integer",
+          "example": 4
+        },
+        "sosd_status": {
+          "description": "SOSD status as an int",
+          "type": "integer"
+        },
+        "sosd_status_valve_output_state": {
+          "description": "SOSD output state as an int",
+          "type": "integer"
+        }
+      }
+    },
+    "server.SystemStatus": {
+      "type": "object",
+      "properties": {
+        "IP": {
+          "description": "Local IP address of the device",
+          "type": "string",
+          "example": "192.168.1.100"
+        },
+        "MAC": {
+          "description": "Local MAC address of the device",
+          "type": "string",
+          "example": "00:1A:2B:3C:4D:5E"
+        },
+        "analogOut0": {
+          "description": "Analog output 0 in mA",
+          "type": "number",
+          "example": 4.5
+        },
+        "analogOut1": {
+          "description": "Analog output 1 in mA",
+          "type": "number",
+          "example": 12.3
+        },
+        "digitalIn": {
+          "description": "Digital input status as a string",
+          "type": "string",
+          "example": "[0,1,1,1]"
+        },
+        "digitalOut": {
+          "description": "Digital output status as a string",
+          "type": "string",
+          "example": "[1,1,0,0]"
+        },
+        "revision": {
+          "description": "Revision of the device (v2 or v3)",
+          "type": "integer",
+          "example": 3
+        },
+        "timezone": {
+          "description": "Timezone as a string, example Europe/Stockholm",
+          "type": "string",
+          "example": "Europe/Zurich"
+        },
+        "version": {
+          "description": "Software version",
+          "type": "string",
+          "example": "3.1.0"
+        }
+      }
+    },
+    "server.ThresholdPair": {
+      "type": "object",
+      "properties": {
+        "severity": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/server.AlarmSeverity"
+            }
+          ],
+          "example": 2
+        },
+        "threshold": {
+          "type": "number",
+          "example": 1000
+        }
+      }
+    },
+    "server.VirtualDeviceInfo": {
+      "type": "object",
+      "properties": {
+        "enabled": {
+          "description": "Whether this virtual device is enabled",
+          "type": "boolean",
+          "example": true
+        },
+        "parentDeviceId": {
+          "description": "ID of the real device this virtual device belongs to",
+          "type": "string",
+          "example": "507f1f77bcf86cd799439011"
+        },
+        "streamId": {
+          "description": "BactoSwitch line ID (0-3)",
+          "type": "integer",
+          "example": 1
+        }
+      }
+    },
+    "server.Warning": {
+      "type": "object",
+      "properties": {
+        "code": {
+          "type": "integer"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "JWT": {
+      "description": "\"Authentication JWT token. Format: 'Bearer <JWT_TOKEN>'. JWT tokens encode user credentials and organization membership for secure access. Also used for API key authentication (without user).\"",
+      "type": "apiKey",
+      "name": "Authorization",
+      "in": "header"
+    }
+  }
+}
