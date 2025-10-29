@@ -4,7 +4,7 @@ BactoCloud Downloader - GUI application for downloading measurement data from Ba
 """
 
 import tkinter as tk
-from tkinter import ttk, messagebox, scrolledtext
+from tkinter import ttk, messagebox, scrolledtext, filedialog
 from datetime import datetime, time
 import threading
 import requests
@@ -114,6 +114,21 @@ class BactoCloudDownloader:
             "A tool for downloading measurement data from BactoCloud API"
         )
         messagebox.showinfo("About BactoCloud Downloader", about_text)
+    
+    def browse_directory(self):
+        """Open a directory selector dialog"""
+        initial_dir = self.output_dir.get()
+        if not os.path.exists(initial_dir):
+            initial_dir = os.getcwd()
+        
+        directory = filedialog.askdirectory(
+            title="Select Output Directory",
+            initialdir=initial_dir
+        )
+        
+        if directory:
+            self.output_dir.set(directory)
+            self.save_config()
         
     def setup_ui(self):
         """Setup the user interface"""
@@ -171,6 +186,10 @@ class BactoCloudDownloader:
         
         ttk.Entry(output_frame, textvariable=self.output_dir, width=50).pack(
             side="left", fill="x", expand=True, padx=5
+        )
+        
+        ttk.Button(output_frame, text="Browse...", command=self.browse_directory).pack(
+            side="right", padx=5
         )
         
         # Download Button
