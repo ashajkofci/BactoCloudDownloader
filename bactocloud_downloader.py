@@ -249,7 +249,7 @@ class BactoCloudDownloader:
         try:
             dt = datetime.fromisoformat(timestamp.replace("Z", "+00:00"))
             date_str = dt.strftime("%Y-%m-%d_%H-%M-%S")
-        except:
+        except (ValueError, AttributeError, TypeError):
             date_str = "unknown_date"
         
         # Sanitize name for filesystem

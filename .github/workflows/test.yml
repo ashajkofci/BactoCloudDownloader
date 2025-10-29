@@ -36,7 +36,7 @@ jobs:
     - name: Run tests (Linux)
       if: runner.os == 'Linux'
       run: |
-        xvfb-run python -m unittest test_bactocloud_downloader.py -v || python -m unittest test_bactocloud_downloader.py -v
+        python -m unittest test_bactocloud_downloader.py -v
     
     - name: Run tests (Windows/macOS)
       if: runner.os != 'Linux'
