@@ -296,7 +296,7 @@ class BactoCloudDownloader:
             "Content-Type": "application/json"
         }
     
-    def make_request_with_retry(self, method, url, max_retries=3, **kwargs):
+    def make_request_with_retry(self, method, url, max_retries=5, **kwargs):
         """Make an API request with retry logic for 429 errors"""
         for attempt in range(max_retries):
             try:
@@ -310,8 +310,8 @@ class BactoCloudDownloader:
                 # If we get a 429, wait and retry
                 if response.status_code == 429:
                     if attempt < max_retries - 1:
-                        self.log(f"    Rate limit reached (429), waiting 5 seconds before retry {attempt + 1}/{max_retries - 1}...")
-                        time_module.sleep(5)
+                        self.log(f"    Rate limit reached (429), waiting 30 seconds before retry {attempt + 1}/{max_retries - 1}...")
+                        time_module.sleep(30)
                         continue
                     else:
                         self.log(f"    Rate limit reached (429), max retries exceeded")
