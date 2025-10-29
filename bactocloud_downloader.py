@@ -10,6 +10,7 @@ import threading
 import requests
 import json
 import os
+import platform
 from pathlib import Path
 from tkcalendar import DateEntry
 
@@ -26,7 +27,93 @@ class BactoCloudDownloader:
         self.selected_devices = []
         self.base_url = "https://api.bactocloud.com"
         
+        self.setup_menu()
         self.setup_ui()
+        self.load_config()
+        
+    def get_config_dir(self):
+        """Get the configuration directory based on the OS"""
+        system = platform.system()
+        
+        if system == "Windows":
+            # Use AppData/Local on Windows
+            base = os.environ.get("LOCALAPPDATA", os.path.expanduser("~"))
+            config_dir = Path(base) / "BactoCloudDownloader"
+        elif system == "Darwin":  # macOS
+            # Use ~/Library/Application Support on macOS
+            config_dir = Path.home() / "Library" / "Application Support" / "BactoCloudDownloader"
+        else:  # Linux and others
+            # Use XDG_CONFIG_HOME or ~/.config on Linux
+            base = os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config")
+            config_dir = Path(base) / "BactoCloudDownloader"
+        
+        # Create directory if it doesn't exist
+        config_dir.mkdir(parents=True, exist_ok=True)
+        return config_dir
+    
+    def get_config_file(self):
+        """Get the path to the configuration file"""
+        return self.get_config_dir() / "config.json"
+    
+    def load_config(self):
+        """Load saved configuration from file"""
+        config_file = self.get_config_file()
+        
+        if config_file.exists():
+            try:
+                with open(config_file, 'r') as f:
+                    config = json.load(f)
+                
+                # Load saved values with type validation
+                if "api_key" in config and isinstance(config["api_key"], str):
+                    self.api_key.set(config["api_key"])
+                if "output_dir" in config and isinstance(config["output_dir"], str):
+                    self.output_dir.set(config["output_dir"])
+                    
+                # Only log if progress_text widget exists
+                if hasattr(self, 'progress_text'):
+                    self.log("Configuration loaded successfully")
+            except Exception as e:
+                # Only log if progress_text widget exists
+                if hasattr(self, 'progress_text'):
+                    self.log(f"Warning: Could not load configuration: {str(e)}")
+    
+    def save_config(self):
+        """Save configuration to file"""
+        config_file = self.get_config_file()
+        
+        try:
+            config = {
+                "api_key": self.api_key.get(),
+                "output_dir": self.output_dir.get()
+            }
+            
+            with open(config_file, 'w') as f:
+                json.dump(config, f, indent=2)
+                
+            self.log("Configuration saved successfully")
+        except Exception as e:
+            self.log(f"Warning: Could not save configuration: {str(e)}")
+    
+    def setup_menu(self):
+        """Setup the menu bar"""
+        menubar = tk.Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # Help menu
+        help_menu = tk.Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="Help", menu=help_menu)
+        help_menu.add_command(label="About", command=self.show_about)
+    
+    def show_about(self):
+        """Show the About dialog"""
+        about_text = (
+            "BactoCloud Downloader\n\n"
+            "Author: Adrian Shajkofci\n"
+            "bNovate Technologies SA\n\n"
+            "A tool for downloading measurement data from BactoCloud API"
+        )
+        messagebox.showinfo("About BactoCloud Downloader", about_text)
         
     def setup_ui(self):
         """Setup the user interface"""
@@ -151,6 +238,9 @@ class BactoCloudDownloader:
                 
                 self.log(f"Loaded {len(self.devices)} devices")
                 self.download_btn.config(state="normal")
+                
+                # Save configuration after successful device load
+                self.save_config()
             else:
                 error_msg = response.json().get("error", "Unknown error")
                 self.log(f"Error loading devices: {error_msg}")
