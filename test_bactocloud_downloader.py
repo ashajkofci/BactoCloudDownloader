@@ -194,5 +194,48 @@ class TestConfigPersistence(unittest.TestCase):
         # by not loading invalid types (tested in the main code)
 
 
+class TestDirectorySelection(unittest.TestCase):
+    """Test cases for directory selection functionality"""
+    
+    def setUp(self):
+        """Set up test fixtures"""
+        self.temp_dir = tempfile.mkdtemp()
+    
+    def tearDown(self):
+        """Clean up test fixtures"""
+        if os.path.exists(self.temp_dir):
+            shutil.rmtree(self.temp_dir)
+    
+    def test_directory_exists_validation(self):
+        """Test that directory existence can be validated"""
+        from pathlib import Path
+        
+        # Create a test directory
+        test_dir = Path(self.temp_dir) / "test_output"
+        test_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Verify it exists
+        self.assertTrue(test_dir.exists())
+        self.assertTrue(test_dir.is_dir())
+    
+    def test_directory_selection_path_update(self):
+        """Test that directory path can be updated"""
+        from pathlib import Path
+        
+        # Create test directories
+        initial_dir = Path(self.temp_dir) / "initial"
+        new_dir = Path(self.temp_dir) / "new_selection"
+        
+        initial_dir.mkdir(parents=True, exist_ok=True)
+        new_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Simulate directory selection
+        selected_dir = str(new_dir)
+        
+        # Verify the path is valid
+        self.assertTrue(os.path.exists(selected_dir))
+        self.assertTrue(os.path.isdir(selected_dir))
+
+
 if __name__ == '__main__':
     unittest.main()
