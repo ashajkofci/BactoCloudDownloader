@@ -122,12 +122,8 @@ class TestBactoCloudDownloaderCore(unittest.TestCase):
 class TestBucketSelection(unittest.TestCase):
     """Test cases for bucket selection functionality"""
     
-    def test_bucket_filter_all_selected(self):
-        """Test bucket filter with all buckets selected"""
-        bucket_auto = True
-        bucket_manual = True
-        bucket_monitoring = True
-        
+    def _build_bucket_list(self, bucket_auto, bucket_manual, bucket_monitoring):
+        """Helper method to build bucket list based on selections"""
         buckets = []
         if bucket_auto:
             buckets.append("auto")
@@ -135,6 +131,11 @@ class TestBucketSelection(unittest.TestCase):
             buckets.append("manual")
         if bucket_monitoring:
             buckets.append("monitoring")
+        return buckets
+    
+    def test_bucket_filter_all_selected(self):
+        """Test bucket filter with all buckets selected"""
+        buckets = self._build_bucket_list(True, True, True)
         
         self.assertEqual(len(buckets), 3)
         self.assertIn("auto", buckets)
@@ -143,50 +144,20 @@ class TestBucketSelection(unittest.TestCase):
     
     def test_bucket_filter_single_selected(self):
         """Test bucket filter with only one bucket selected"""
-        bucket_auto = True
-        bucket_manual = False
-        bucket_monitoring = False
-        
-        buckets = []
-        if bucket_auto:
-            buckets.append("auto")
-        if bucket_manual:
-            buckets.append("manual")
-        if bucket_monitoring:
-            buckets.append("monitoring")
+        buckets = self._build_bucket_list(True, False, False)
         
         self.assertEqual(len(buckets), 1)
         self.assertEqual(buckets[0], "auto")
     
     def test_bucket_filter_none_selected(self):
         """Test bucket filter with no buckets selected"""
-        bucket_auto = False
-        bucket_manual = False
-        bucket_monitoring = False
-        
-        buckets = []
-        if bucket_auto:
-            buckets.append("auto")
-        if bucket_manual:
-            buckets.append("manual")
-        if bucket_monitoring:
-            buckets.append("monitoring")
+        buckets = self._build_bucket_list(False, False, False)
         
         self.assertEqual(len(buckets), 0)
     
     def test_bucket_filter_mixed_selection(self):
         """Test bucket filter with mixed selection"""
-        bucket_auto = True
-        bucket_manual = False
-        bucket_monitoring = True
-        
-        buckets = []
-        if bucket_auto:
-            buckets.append("auto")
-        if bucket_manual:
-            buckets.append("manual")
-        if bucket_monitoring:
-            buckets.append("monitoring")
+        buckets = self._build_bucket_list(True, False, True)
         
         self.assertEqual(len(buckets), 2)
         self.assertIn("auto", buckets)

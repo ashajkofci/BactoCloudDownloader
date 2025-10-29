@@ -362,10 +362,7 @@ class BactoCloudDownloader:
                     buckets.append("monitoring")
                 
                 # Log selected buckets
-                if buckets:
-                    self.log(f"  Buckets: {', '.join(buckets)}")
-                else:
-                    self.log(f"  Warning: No buckets selected, downloading all data")
+                self.log(f"  Buckets: {', '.join(buckets)}")
                 
                 # Prepare filter for data query
                 filter_data = {
@@ -377,8 +374,7 @@ class BactoCloudDownloader:
                 }
                 
                 # Add buckets filter if any are selected
-                if buckets:
-                    filter_data["buckets"] = buckets
+                filter_data["buckets"] = buckets
                 
                 # Get data list
                 response = requests.post(
