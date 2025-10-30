@@ -388,7 +388,7 @@ class BactoCloudDownloader:
                 'get',
                 f"{self.base_url}/api/v1/device",
                 headers=self.get_headers(),
-                params={"no_virtual": "true"}
+                params={"no_virtual": "false"}
             )
             
             if response.status_code == 200:
